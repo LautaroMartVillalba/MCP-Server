@@ -1,0 +1,22 @@
+services:
+  database:
+    image: hoteldb
+    restart: always
+    shm_size: 128mb
+    ports:
+      - "5431:5432"
+    container_name: database
+    volumes:
+      - database:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: hotelms
+      POSTGRES_PASSWORD: hotelms
+      POSTGRES_DB: hotel
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "hotelms", "-d", "hotel" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  database:
