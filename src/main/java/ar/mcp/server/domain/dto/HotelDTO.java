@@ -30,6 +30,6 @@ public class HotelDTO {
     private List<Long> roomsId;
     private List<Long> benefitsId;
     private List<Long> attractionsId;
-    private String ubication;
+    private String location;
     private String address;
 }

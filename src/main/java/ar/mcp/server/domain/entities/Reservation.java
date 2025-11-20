@@ -17,7 +17,7 @@ import java.time.LocalDate;
  * <p>
  * Relationships:
  * <ul>
- *     <li>{@link Person}: One-to-One relationship. Each reservation is linked to a single client.</li>
+ *     <li>{@link Person}: Many-to-One relationship. Multiple reservations can be made by a single person.</li>
  *     <li>{@link Room}: Many-to-One relationship. Each reservation is associated with a specific room.</li>
  * </ul>
  * </p>
@@ -33,7 +33,7 @@ import java.time.LocalDate;
 @Getter
 @Setter
 @Builder
-@ToString(exclude = "client")
+@ToString(exclude = "person")
 public class Reservation {
 
     @Id
@@ -60,9 +60,9 @@ public class Reservation {
     @Column(name = "total_price")
     private BigDecimal totalPrice;
     @NotNull
-    @OneToOne
+    @ManyToOne
     @JoinColumn(name = "person_id", referencedColumnName = "id")
-    private Person client;
+    private Person person;
     @NotNull
     @ManyToOne
     @JoinColumn(name = "room_id", referencedColumnName = "id")

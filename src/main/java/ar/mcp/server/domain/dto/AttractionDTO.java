@@ -7,11 +7,13 @@ import lombok.Data;
 
 import java.time.LocalTime;
 
+import java.util.List;
+
 /**
  * Data Transfer Object for {@link Attraction}.
  * <p>
  * Used to transfer attraction data between layers without exposing the entity directly.
- * Contains basic attraction fields and reference to the associated hotel.
+ * Contains basic attraction fields and references to associated hotels.
  * </p>
  */
 @AllArgsConstructor
@@ -25,6 +27,6 @@ public class AttractionDTO {
     private int peopleCapacity;
     private LocalTime openAt;
     private LocalTime closeAt;
-    private Long hotelId;
+    private List<Long> hotelIds;
 
 }

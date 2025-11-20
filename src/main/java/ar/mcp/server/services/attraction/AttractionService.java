@@ -1,14 +1,18 @@
-package ar.mcp.server.services;
+package ar.mcp.server.services.attraction;
 
 import ar.mcp.server.domain.dto.AttractionDTO;
 import ar.mcp.server.domain.entities.Attraction;
 import ar.mcp.server.domain.entities.Hotel;
 import ar.mcp.server.repositories.AttractionRepository;
 import ar.mcp.server.repositories.HotelRepository;
+import org.springaicommunity.mcp.annotation.McpTool;
+import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -70,66 +74,59 @@ public class AttractionService {
      */
     public List<AttractionDTO> parseFromAttractionListToAttractionDTOList(List<Attraction> list){
         return list.stream().map(attraction -> {
-            Hotel hotel = attraction.getHotel();
+            List<Long> hotelIds = attraction.getHotels().stream()
+                    .map(Hotel::getId)
+                    .toList();
 
             return AttractionDTO.builder()
+                    .id(attraction.getId())
                     .name(attraction.getName())
                     .description(attraction.getDescription())
                     .peopleCapacity(attraction.getPeopleCapacity())
                     .openAt(attraction.getOpenAt())
                     .closeAt(attraction.getCloseAt())
-                    .hotelId(hotel != null ? hotel.getId() : null).build();
+                    .hotelIds(hotelIds).build();
         }).toList();
     }
 
     /**
-     * Creates a new {@link Attraction} and associates it with a {@link Hotel}.
+     * Creates a new {@link Attraction} and associates it with multiple {@link Hotel}s.
      *
-     * @param dto     {@link AttractionDTO} containing attraction data.
-     * @param hotelId ID of the hotel to associate the attraction with.
+     * @param dto {@link AttractionDTO} containing attraction data.
      * @return The created {@link Attraction} entity.
      * @throws RuntimeException if required fields are missing.
-     * @throws RuntimeException if the hotel does not exist.
+     * @throws RuntimeException if any hotel does not exist.
      */
+    @McpTool(
+            name = "create_attraction",
+            description = "Crea una nueva atracción y la asocia a uno o más hoteles existentes."
+    )
     @Transactional
-    public Attraction createAttraction(AttractionDTO dto, Long hotelId) {
+    public Attraction createAttraction(
+            @ToolParam(required = true, description = """
+            DTO con los datos de la atracción a crear. hotelIds puede estar vacío inicialmente.
+            """) AttractionDTO dto) {
         validateInfo(dto.getName(), dto.getDescription(), dto.getPeopleCapacity(), dto.getOpenAt(), dto.getCloseAt());
 
-        Hotel hotel = hotelRepository.findById(hotelId).orElseThrow(() -> new RuntimeException("Register not found in the DataBase."));
+        List<Hotel> hotels = new ArrayList<>();
+        if (dto.getHotelIds() != null && !dto.getHotelIds().isEmpty()) {
+            hotels = hotelRepository.findAllById(dto.getHotelIds());
+            if (hotels.size() != dto.getHotelIds().size()) {
+                throw new RuntimeException("One or more hotels not found in the Database.");
+            }
+        }
 
         Attraction attraction = Attraction.builder()
                 .name(dto.getName())
+                .description(dto.getDescription())
                 .peopleCapacity(dto.getPeopleCapacity())
                 .openAt(dto.getOpenAt())
                 .closeAt(dto.getCloseAt())
-                .hotel(hotel).build();
+                .hotels(hotels).build();
 
         attractionRepository.save(attraction);
 
         return attraction;
-    }
-
-    /**
-     * Retrieves an {@link AttractionDTO} by attraction ID.
-     *
-     * @param id ID of the attraction.
-     * @return {@link AttractionDTO} corresponding to the provided ID.
-     * @throws RuntimeException        if ID is null or invalid.
-     * @throws RuntimeException if no attraction is found.
-     */
-    public AttractionDTO getAttractionByIdDTO(Long id) {
-        if (id == null || id < 1) {
-            throw new RuntimeException("Id cannot be null.");
-        }
-
-        Attraction attractionInDB = attractionRepository.findById(id).orElseThrow(()-> new RuntimeException("Attraction cannot be found by id."));
-
-        return AttractionDTO.builder()
-                .name(attractionInDB.getName())
-                .description(attractionInDB.getDescription())
-                .peopleCapacity(attractionInDB.getPeopleCapacity())
-                .openAt(attractionInDB.getOpenAt())
-                .closeAt(attractionInDB.getCloseAt()).build();
     }
 
     /**
@@ -140,7 +137,14 @@ public class AttractionService {
      * @throws RuntimeException        if ID is invalid.
      * @throws RuntimeException if the attraction is not found.
      */
-    public Attraction getAttractionByIdObject(Long id) {
+    @McpTool(
+            name = "get_attraction_by_id_object",
+            description = "Obtiene una entidad Attraction a partir de su ID."
+    )
+    public Attraction getAttractionByIdObject(
+            @ToolParam(required = true, description = """
+            ID de la atracción a obtener.
+            """) Long id) {
         if (id <= 0) {
             throw new RuntimeException("Id cannot be null.");
         }
@@ -148,111 +152,57 @@ public class AttractionService {
         return attractionRepository.findById(id).orElseThrow(() -> new RuntimeException("Register not found in the DataBase."));
     }
 
-    /**
-     * Retrieves a list of attractions whose names contain the specified string.
-     *
-     * @param name Partial or full name of the attraction. Must not be blank.
-     * @return List of {@link AttractionDTO} matching the search criteria.
-     * @throws RuntimeException if name is blank.
-     */
-    public List<AttractionDTO> getAttractionByName(String name) {
-        if (name.isBlank()) {
-            throw new RuntimeException("Name parameter cannot be empty.");
-        }
+    @McpTool(
+            name = "find_attraction_by_spec",
+            description = """
+                Realiza una búsqueda dinámica de atracciones según los parámetros provistos.
 
-        return parseFromAttractionListToAttractionDTOList(attractionRepository.findByNameContaining(name));
-    }
+                Todos los parámetros son opcionales. Si un parámetro no se incluye, se ignora en el filtro.
+                Ejemplo de uso:
+                {
+                  "id": null,
+                  "name": null,
+                  "description": "jacuzzi con hidromasaje",
+                  "minPeopleCapacity": null,
+                  "maxPeopleCapacity": null,
+                  "openAt": null,
+                  "closeAt": null
+                }
 
-    /**
-     * Retrieves a list of attractions whose descriptions contain the specified string.
-     *
-     * @param desc Partial or full description of the attraction. Must not be blank.
-     * @return List of {@link AttractionDTO} matching the description.
-     * @throws RuntimeException if description is blank.
-     */
-    List<AttractionDTO> getAttractionByDesc(String desc) {
-        if (desc.isBlank()) {
-            throw new RuntimeException("Description cannot be null.");
-        }
+                En este ejemplo, solo se filtrarán las atracciones cuya descripción tenga una coincidencia con "jacuzzi con hidromasaje" en su texto."""
+    )
+    public List<AttractionDTO> findAttractionBySpec(
+            @ToolParam(required = false,
+                    description = "Identificador único del registro. No obligatorio.") Long id,
+            @ToolParam(required = false,
+                    description = "Nombre de la atracción. No obligatorio.") String name,
+            @ToolParam(required = false,
+                    description = """
+            Idea general en frases cortas o con una o
+            dos palabras clave para evitar falsos negativos en coincidencias de
+            descripciones. No obligatorio.""") String description,
+            @ToolParam(required = false,
+                    description = "Capacidad mínima de gente por la cual se quiere filtrar. No obligatorio.") Integer minPeopleCapacity,
+            @ToolParam(required = false,
+                    description = "Cantidad máxima de gente por la cual se quiere filtrar. No obligatorio.") Integer maxPeopleCapacity,
+            @ToolParam(required = false,
+                    description = "Horario de apertura. No obligatorio.") LocalTime openAt,
+            @ToolParam(required = false,
+                    description = "Horario de cierre. No obligatorio.") LocalTime closeAt
+    ){
+        Specification<Attraction> specification = Specification.unrestricted();
 
-        return parseFromAttractionListToAttractionDTOList(attractionRepository.findByDescriptionContaining(desc));
-    }
+        specification = specification.and(AttractionSpecifications.hasId(id));
+        specification = specification.and(AttractionSpecifications.hasName(name));
+        specification = specification.and(AttractionSpecifications.hasDescription(description));
+        specification = specification.and(AttractionSpecifications.hasCapacityGreaterThan(minPeopleCapacity));
+        specification = specification.and(AttractionSpecifications.hasCapacityLessThan(maxPeopleCapacity));
+        specification = specification.and(AttractionSpecifications.hasOpenAt(openAt));
+        specification = specification.and(AttractionSpecifications.hasEndAt(closeAt));
 
-    /**
-     * Retrieves a list of attractions whose capacities fall within a given range.
-     *
-     * @param min Minimum number of people. Must be > 0.
-     * @param max Maximum number of people. Must be >= min.
-     * @return List of {@link AttractionDTO} matching the capacity range.
-     * @throws RuntimeException if the values are invalid.
-     */
-    List<AttractionDTO> getAttractionByCapacity(int min, int max) {
-        if (min <= 0 || min > max) {
-            throw new RuntimeException("Insert valid minimum and maximum values.");
-        }
+        specification = specification.and(AttractionSpecifications.fetchEverythingForDTO());
 
-        return parseFromAttractionListToAttractionDTOList(attractionRepository.findByPeopleCapacityBetween(min, max));
-    }
-
-    /**
-     * Retrieves a list of attractions that open after a specified time.
-     *
-     * @param time Opening time filter. Must not be null.
-     * @return List of {@link AttractionDTO} that open after the given time.
-     * @throws RuntimeException if time is null.
-     */
-    List<AttractionDTO> getAttractionByOpening(LocalTime time) {
-        if (time == null) {
-            throw new RuntimeException("Invalid time format.");
-        }
-
-        return parseFromAttractionListToAttractionDTOList(attractionRepository.findByOpenAtGreaterThan(time));
-    }
-
-    /**
-     * Retrieves a list of attractions that close before a specified time.
-     *
-     * @param time Closing time filter. Must not be null.
-     * @return List of {@link AttractionDTO} that close before the given time.
-     * @throws RuntimeException if time is null.
-     */
-    List<AttractionDTO> getAttractionByEnding(LocalTime time) {
-        if (time == null) {
-            throw new RuntimeException("Invalid time format.");
-        }
-
-        return parseFromAttractionListToAttractionDTOList(attractionRepository.findByCloseAtLessThan(time));
-    }
-
-    /**
-     * Retrieves a list of attractions that open and close within a specified time range.
-     *
-     * @param opening Start time filter. Must not be null.
-     * @param ending  End time filter. Must not be null.
-     * @return List of {@link AttractionDTO} within the specified opening and closing times.
-     * @throws RuntimeException if any time parameter is null.
-     */
-    List<AttractionDTO> getAttractionBetweenOpeningAndEnding(LocalTime opening, LocalTime ending) {
-        if (opening == null || ending == null) {
-            throw new RuntimeException("Invalid time format.");
-        }
-
-        return parseFromAttractionListToAttractionDTOList(attractionRepository.findByOpenAtGreaterThanEqualAndCloseAtLessThanEqual(opening, ending));
-    }
-
-    /**
-     * Retrieves a list of attractions associated with a specific hotel.
-     *
-     * @param hotelId ID of the hotel. Must not be null.
-     * @return List of {@link AttractionDTO} belonging to the hotel.
-     * @throws RuntimeException if hotelId is null.
-     */
-    List<AttractionDTO> getByHotelId(Long hotelId){
-        if (hotelId == null){
-            throw new RuntimeException("Id cannot be null.");
-        }
-
-        return parseFromAttractionListToAttractionDTOList(attractionRepository.findByHotel(hotelId));
+        return this.parseFromAttractionListToAttractionDTOList(attractionRepository.findAll(specification));
     }
 
     /**
@@ -264,8 +214,18 @@ public class AttractionService {
      * @throws RuntimeException if no attraction with the given ID exists.
      * @throws RuntimeException        if any field in the updated entity is invalid according to {@link #validateInfo}.
      */
+    @McpTool(
+            name = "update_attraction",
+            description = "Actualiza una atracción existente con los datos proporcionados."
+    )
     @Transactional
-    Attraction updateAttraction(Long id, AttractionDTO dto) {
+    Attraction updateAttraction(
+            @ToolParam(required = true, description = """
+            ID de la atracción que se desea actualizar.
+            """) Long id,
+            @ToolParam(required = true, description = """
+            DTO con los nuevos valores para la atracción.
+            """) AttractionDTO dto) {
         Attraction attractionInDB = attractionRepository.findById(id).orElseThrow(() -> new RuntimeException("Register not found in the Database."));
 
         if (dto.getName() != null && !dto.getName().isBlank()) {
@@ -302,8 +262,15 @@ public class AttractionService {
      * @throws RuntimeException if no attraction with the given ID exists.
      * @throws RuntimeException        if the attraction is currently open and cannot be deleted.
      */
+    @McpTool(
+            name = "delete_attraction",
+            description = "Elimina una atracción, siempre que no esté en funcionamiento en el momento actual."
+    )
     @Transactional
-    public void deleteAttraction(Long id) {
+    public void deleteAttraction(
+            @ToolParam(required = true, description = """
+            ID de la atracción a eliminar.
+            """) Long id) {
         Attraction attractionInDB = this.getAttractionByIdObject(id);
 
         LocalTime opening = attractionInDB.getOpenAt();

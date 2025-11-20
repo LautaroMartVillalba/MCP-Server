@@ -5,6 +5,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import java.time.LocalTime;
 
 /**
@@ -17,7 +20,7 @@ import java.time.LocalTime;
  * <p>
  * Relationships:
  * <ul>
- *     <li>{@link Hotel}: Many-to-One relationship. Each attraction is linked to a single hotel.</li>
+ *     <li>{@link Hotel}: Many-to-Many relationship. Each attraction can be shared by multiple hotels.</li>
  * </ul>
  * </p>
  * <p>
@@ -33,7 +36,7 @@ import java.time.LocalTime;
 @Getter
 @Setter
 @Builder
-@ToString(exclude = "hotel")
+@ToString(exclude = "hotels")
 public class Attraction {
 
     @Id
@@ -52,9 +55,8 @@ public class Attraction {
     @NotNull
     private LocalTime closeAt;
     @NotNull
-    @ManyToOne
-    @JoinColumn(name = "hotel_id", referencedColumnName = "id")
-    private Hotel hotel;
+    @ManyToMany(mappedBy = "attractions")
+    private List<Hotel> hotels = new ArrayList<>();
 
 
 }

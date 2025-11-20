@@ -5,11 +5,13 @@ import lombok.*;
 
 import java.time.LocalTime;
 
+import java.util.List;
+
 /**
  * Data Transfer Object for {@link Benefit}.
  * <p>
  * Used to transfer benefit (service) data between layers without exposing the entity directly.
- * Contains basic benefit fields and reference to the associated hotel.
+ * Contains basic benefit fields and references to associated hotels.
  * </p>
  */
 @AllArgsConstructor
@@ -23,5 +25,5 @@ public class BenefitDTO {
     private String description;
     private LocalTime openAt;
     private LocalTime closeAt;
-    private Long hotelId;
+    private List<Long> hotelIds;
 }

@@ -1,6 +1,6 @@
 package ar.mcp.server.domain.entities;
 
-import ar.mcp.server.domain.entities.address.Address;
+import ar.mcp.server.domain.entities.address.HotelAddress;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -24,7 +24,7 @@ import java.util.List;
  *     <li>{@link Room}: One-to-Many relationship. A hotel can have multiple rooms.</li>
  *     <li>{@link Benefit}: One-to-Many relationship. A hotel can provide multiple benefits.</li>
  *     <li>{@link Attraction}: One-to-Many relationship. A hotel can have multiple nearby attractions.</li>
- *     <li>{@link Address}: One-to-One relationship. Each hotel has a unique address.</li>
+ *     <li>{@link HotelAddress}: One-to-One relationship. Each hotel has a unique address.</li>
  * </ul>
  * </p>
  * <p>
@@ -69,13 +69,22 @@ public class Hotel {
     @OneToMany(mappedBy = "hotel")
     private List<Room> rooms = new ArrayList<>();
     @NotNull
-    @OneToMany(mappedBy = "hotel")
+    @ManyToMany
+    @JoinTable(
+        name = "entity_hotel_benefit",
+        joinColumns = @JoinColumn(name = "entity_hotel_id"),
+        inverseJoinColumns = @JoinColumn(name = "entity_benefit_id")
+    )
     private List<Benefit> benefits = new ArrayList<>();
     @NotNull
-    @OneToMany(mappedBy = "hotel")
-    private List <Attraction> attractions = new ArrayList<>();
-    @OneToOne
-    @JoinColumn(name = "address_id", referencedColumnName = "id")
-    private Address address;
+    @ManyToMany
+    @JoinTable(
+        name = "entity_hotel_attraction",
+        joinColumns = @JoinColumn(name = "entity_hotel_id"),
+        inverseJoinColumns = @JoinColumn(name = "entity_attraction_id")
+    )
+    private List<Attraction> attractions = new ArrayList<>();
+    @OneToOne(mappedBy = "hotel", cascade = CascadeType.ALL)
+    private HotelAddress address;
 
 }

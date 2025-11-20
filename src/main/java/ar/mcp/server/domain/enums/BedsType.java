@@ -6,11 +6,11 @@ import lombok.Getter;
 @AllArgsConstructor
 @Getter
 public enum BedsType {
-    SINGLE_BED(1.05F),
-    DOUBLE_BED(1.10F),
-    QUEEN_BED(1.20F),
-    KING_BED(1.25F),
-    TWIN_BED(1.35F);
+    SINGLE(1.05F),
+    DOUBLE(1.10F),
+    QUEEN(1.20F),
+    KING(1.25F),
+    TWIN(1.35F);
 
     private final float multiplier;
 }

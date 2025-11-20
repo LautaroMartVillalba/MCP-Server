@@ -1,13 +1,12 @@
 services:
   database:
     image: hoteldb
-    restart: always
     shm_size: 128mb
     ports:
       - "5431:5432"
     container_name: database
     volumes:
-      - database:/var/lib/postgresql/data
+      - hoteldb:/var/lib/postgresql/data
     environment:
       POSTGRES_USER: hotelms
       POSTGRES_PASSWORD: hotelms
@@ -19,4 +18,4 @@ services:
       retries: 3
 
 volumes:
-  database:
+  hoteldb:

@@ -1,9 +1,12 @@
 package ar.mcp.server.domain.entities;
 
-import ar.mcp.server.domain.entities.address.Address;
+import ar.mcp.server.domain.entities.address.PersonAddress;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import lombok.*;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Represents a Person entity within the application.
@@ -15,8 +18,8 @@ import lombok.*;
  * <p>
  * Relationships:
  * <ul>
- *     <li>{@link Reservation}: One-to-One relationship. Each person can have one reservation.</li>
- *     <li>{@link Address}: One-to-One relationship. Each person can have a unique address.</li>
+ *     <li>{@link Reservation}: One-to-Many relationship. Each person can have multiple reservations.</li>
+ *     <li>{@link PersonAddress}: One-to-One relationship. Each person can have a unique address.</li>
  * </ul>
  * </p>
  * <p>
@@ -61,11 +64,10 @@ public class Person {
     private String cellPhone;
     @NotNull
     private int numberOfReservations;
-    @NotNull
-    @OneToOne(mappedBy = "client")
-    private Reservation reservation;
+    @OneToMany(mappedBy = "person")
+    private List<Reservation> reservations = new ArrayList<>();
     @OneToOne
     @JoinColumn(name = "address_id", referencedColumnName = "id")
-    private Address address;
+    private PersonAddress address;
 
 }

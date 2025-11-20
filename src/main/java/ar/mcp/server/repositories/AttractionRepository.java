@@ -2,6 +2,7 @@ package ar.mcp.server.repositories;
 
 import ar.mcp.server.domain.entities.Attraction;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
@@ -14,15 +15,6 @@ import java.util.List;
  * based on various attributes.
  */
 @Repository
-public interface AttractionRepository extends JpaRepository<Attraction, Long> {
-
-    List<Attraction> findByNameContaining(String name);
-    List<Attraction> findByDescriptionContaining(String description);
-    List<Attraction> findByPeopleCapacityBetween(int min, int max);
-    List<Attraction> findByOpenAtGreaterThan(LocalTime open);
-    List<Attraction> findByCloseAtLessThan(LocalTime close);
-    List<Attraction> findByOpenAtGreaterThanEqualAndCloseAtLessThanEqual(LocalTime open, LocalTime close);
-    @Query("SELECT a FROM Attraction a JOIN a.hotel h WHERE h.id = :id")
-    List<Attraction> findByHotel(Long id);
+public interface AttractionRepository extends JpaRepository<Attraction, Long>, JpaSpecificationExecutor<Attraction> {
 
 }

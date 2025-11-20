@@ -1,12 +1,17 @@
-package ar.mcp.server.services;
+package ar.mcp.server.services.benefit;
 
 import ar.mcp.server.domain.dto.BenefitDTO;
 import ar.mcp.server.domain.entities.Benefit;
 import ar.mcp.server.domain.entities.Hotel;
 import ar.mcp.server.repositories.BenefitRepository;
 import ar.mcp.server.repositories.HotelRepository;
+import org.springaicommunity.mcp.annotation.McpTool;
+import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
 
 import java.time.LocalTime;
 import java.util.List;
@@ -60,14 +65,17 @@ public class BenefitService {
      */
     public List<BenefitDTO> parseBenefitListToBenefitDTOList (List<Benefit> list){
         return list.stream().map(benefit -> {
-            Hotel hotel = benefit.getHotel();
+            List<Long> hotelIds = benefit.getHotels().stream()
+                    .map(Hotel::getId)
+                    .toList();
 
             return BenefitDTO.builder()
+                    .id(benefit.getId())
                     .name(benefit.getName())
                     .description(benefit.getDescription())
                     .openAt(benefit.getOpenAt())
                     .closeAt(benefit.getCloseAt())
-                    .hotelId(hotel != null ? hotel.getId() : null).build();
+                    .hotelIds(hotelIds).build();
         }).toList();
     }
 
@@ -76,47 +84,39 @@ public class BenefitService {
      *
      * @param dto Data transfer object containing the information for the benefit.
      * @return The created {@link Benefit} entity.
-     * @throws RuntimeException if the associated hotel cannot be found.
+     * @throws RuntimeException if any associated hotel cannot be found.
      * @throws RuntimeException        if required fields are missing.
      */
+    @McpTool(
+            name = "create_benefit",
+            description = "Crea un nuevo beneficio en la base de datos a partir de un DTO con la información correspondiente."
+    )
     @Transactional
-    public Benefit createBenefit(BenefitDTO dto){
+    public Benefit createBenefit(
+            @ToolParam(
+                    required = true,
+                    description = "DTO con la información del beneficio a crear. hotelIds puede estar vacío inicialmente."
+            ) BenefitDTO dto){
         validateInfo(dto.getName(), dto.getDescription(), dto.getOpenAt(), dto.getCloseAt());
-        Hotel hotel = hotelRepository.findById(dto.getHotelId()).orElseThrow(() -> new RuntimeException("Register not found in the DataBase."));
+        
+        List<Hotel> hotels = new ArrayList<>();
+        if (dto.getHotelIds() != null && !dto.getHotelIds().isEmpty()) {
+            hotels = hotelRepository.findAllById(dto.getHotelIds());
+            if (hotels.size() != dto.getHotelIds().size()) {
+                throw new RuntimeException("One or more hotels not found in the Database.");
+            }
+        }
 
         Benefit benefit = Benefit.builder()
                 .name(dto.getName())
                 .description(dto.getDescription())
                 .openAt(dto.getOpenAt())
                 .closeAt(dto.getCloseAt())
-                .hotel(hotel).build();
+                .hotels(hotels).build();
 
         benefitRepository.save(benefit);
 
         return benefit;
-    }
-
-    /**
-     * Retrieves a {@link BenefitDTO} by its ID.
-     *
-     * @param id ID of the benefit.
-     * @return {@link BenefitDTO} representing the benefit.
-     * @throws RuntimeException        if ID is invalid.
-     * @throws RuntimeException if the benefit cannot be found.
-     */
-    public BenefitDTO getBenefitByIdResponse(Long id){
-        if (id == 0){
-            throw new RuntimeException("Insert a valid id number.");
-        }
-
-        Benefit result = benefitRepository.findById(id).orElseThrow(() -> new RuntimeException("Register not found in the DataBase."));
-
-        return BenefitDTO.builder()
-                .name(result.getName())
-                .description(result.getDescription())
-                .openAt(result.getOpenAt())
-                .closeAt(result.getCloseAt())
-                .hotelId(result.getHotel().getId()).build();
     }
 
     /**
@@ -127,7 +127,15 @@ public class BenefitService {
      * @throws RuntimeException        if ID is invalid.
      * @throws RuntimeException if the benefit cannot be found.
      */
-    public Benefit getBenefitByIdObject(Long id) {
+    @McpTool(
+            name = "get_benefit_by_id_object",
+            description = "Obtiene un beneficio por su ID y devuelve la entidad Benefit completa."
+    )
+    public Benefit getBenefitByIdObject(
+            @ToolParam(
+                    required = true,
+                    description = "ID del beneficio que se desea obtener."
+            ) Long id) {
         if (id == 0 || id < 1) {
             throw new RuntimeException("Insert a valid id number.");
         }
@@ -135,95 +143,52 @@ public class BenefitService {
         return benefitRepository.findById(id).orElseThrow(() -> new RuntimeException("Register not found in the DataBase."));
     }
 
-    /**
-     * Finds benefits whose name contains the given string.
-     *
-     * @param name Name filter.
-     * @return List of {@link BenefitDTO}.
-     * @throws RuntimeException if name is empty.
-     */
-    public List<BenefitDTO> getBenefitByName(String name){
-        if (name.isBlank()){
-            throw new RuntimeException("Name cannot be null.");
-        }
+    @McpTool(
+            name = "find_benefit_by_spec",
+            description = """
+                Realiza una búsqueda dinámica de beneficios que brinda un hotel según los parámetros provistos.
 
-        return parseBenefitListToBenefitDTOList(benefitRepository.findByNameContaining(name));
-    }
+                Todos los parámetros son opcionales. Si un parámetro no se incluye, se ignora en el filtro.
+                Ejemplo de uso:
+                {
+                  "id": null,
+                  "name": "Desayuno",
+                  "description": null,
+                  "openAt": null,
+                  "closeAt": null
+                }
 
-    /**
-     * Finds benefits whose description contains the given string.
-     *
-     * @param desc Description filter.
-     * @return List of {@link BenefitDTO}.
-     * @throws RuntimeException if description is empty.
-     */
-    public List<BenefitDTO> getBenefitByDescription(String desc){
-        if (desc.isBlank()){
-            throw new RuntimeException("Description cannot be null.");
-        }
+                En este ejemplo, solo se filtrarán los beneficios de hoteles que tengan "desayuno" en su nombre."""
+    )
+    public List<BenefitDTO> findBenefitBySpec(
+            @ToolParam(required = false,
+                    description = "Identificador único del registro. No obligatorio.") Long id,
+            @ToolParam(required = false,
+                    description = """
+                                    Nombre del beneficio, tratar de resumir
+                                    o utilizar palabras clave para evitar falsos
+                                    negativos. No obligatorio.""") String name,
+            @ToolParam(required = false,
+                    description = """
+                                    Idea general en frases cortas o con una o
+                                    dos palabras clave para evitar falsos negativos en coincidencias de
+                                    descripciones. No obligatorio.""") String description,
+            @ToolParam(required = false,
+                    description = "Horario en el cual el beneficio empieza a estar disponible. No obligatorio.") LocalTime openAt,
+            @ToolParam(required = false,
+                    description = "Horario en el cual el beneficio ya no está disponible. No obligatorio.") LocalTime closeAt
+    ){
+        Specification<Benefit> specification = Specification.unrestricted();
 
-        return parseBenefitListToBenefitDTOList(benefitRepository.findByDescriptionContaining(desc));
-    }
+        specification = specification.and(BenefitSpecifications.hasId(id));
+        specification = specification.and(BenefitSpecifications.hasName(name));
+        specification = specification.and(BenefitSpecifications.hasDescription(description));
+        specification = specification.and(BenefitSpecifications.hasOpenAtGraterThan(openAt));
+        specification = specification.and(BenefitSpecifications.hasCloseAtLessThan(closeAt));
 
-    /**
-     * Finds benefits that open after the given time.
-     *
-     * @param opening Opening time filter.
-     * @return List of {@link BenefitDTO}.
-     * @throws RuntimeException if opening time is null.
-     */
-    public List<BenefitDTO> getBenefitByOpening(LocalTime opening){
-        if (opening == null){
-            throw new RuntimeException("Opening time cannot be null.");
-        }
+        specification = specification.and(BenefitSpecifications.fetchEverythingForDTO());
 
-        return parseBenefitListToBenefitDTOList(benefitRepository.findByOpenAtGreaterThan(opening));
-    }
-
-    /**
-     * Finds benefits that close before the given time.
-     *
-     * @param ending Closing time filter.
-     * @return List of {@link BenefitDTO}.
-     * @throws RuntimeException if closing time is null.
-     */
-    public List<BenefitDTO> getBenefitByEnding(LocalTime ending){
-        if (ending == null){
-            throw new RuntimeException("ending time cannot be null.");
-        }
-
-        return parseBenefitListToBenefitDTOList(benefitRepository.findByCloseAtLessThan(ending));
-    }
-
-    /**
-     * Finds benefits whose opening and closing times are within the given range.
-     *
-     * @param open  Minimum opening time.
-     * @param close Maximum closing time.
-     * @return List of {@link BenefitDTO}.
-     * @throws RuntimeException if any of the parameters are null.
-     */
-    public List<BenefitDTO> getByOpenBetween(LocalTime open, LocalTime close){
-        if (open == null || close == null){
-            throw new RuntimeException("Both ending or opening cannot be null.");
-        }
-
-        return parseBenefitListToBenefitDTOList(benefitRepository.findByOpenAtGreaterThanEqualAndCloseAtLessThanEqual(open, close));
-    }
-
-    /**
-     * Retrieves all benefits associated with a specific hotel.
-     *
-     * @param hotelId ID of the hotel.
-     * @return List of {@link BenefitDTO}.
-     * @throws RuntimeException if hotelId is null.
-     */
-    public List<BenefitDTO> getByHotelId(Long hotelId){
-        if (hotelId == null){
-            throw new RuntimeException("Id cannot be null");
-        }
-
-        return parseBenefitListToBenefitDTOList(benefitRepository.findByHotel(hotelId));
+        return parseBenefitListToBenefitDTOList(benefitRepository.findAll(specification));
     }
 
     /**
@@ -235,8 +200,20 @@ public class BenefitService {
      * @throws RuntimeException if the benefit cannot be found.
      * @throws RuntimeException        if updated data is invalid.
      */
+    @McpTool(
+            name = "update_benefit",
+            description = "Actualiza un beneficio existente con nuevos valores proporcionados en un DTO."
+    )
     @Transactional
-    public Benefit updateBenefit(Long id, BenefitDTO dto){
+    public Benefit updateBenefit(
+            @ToolParam(
+                    required = true,
+                    description = "ID del beneficio que se desea actualizar."
+            ) Long id,
+            @ToolParam(
+                    required = true,
+                    description = "DTO con los nuevos valores del beneficio."
+            ) BenefitDTO dto){
         Benefit benefitInDB = this.getBenefitByIdObject(id);
 
         if (!dto.getName().isBlank()){
@@ -269,8 +246,16 @@ public class BenefitService {
      * @throws RuntimeException if the benefit cannot be found.
      * @throws RuntimeException        if the benefit is currently open.
      */
+    @McpTool(
+            name = "delete_benefit_by_id",
+            description = "Elimina un beneficio por su ID, siempre que no se encuentre actualmente en horario de funcionamiento."
+    )
     @Transactional
-    public void deleteBenefitById(Long id){
+    public void deleteBenefitById(
+            @ToolParam(
+                    required = true,
+                    description = "ID del beneficio que se desea eliminar."
+            ) Long id){
         Benefit benefitInDB = this.getBenefitByIdObject(id);
 
         if (benefitInDB.getOpenAt().isBefore(LocalTime.now()) && benefitInDB.getCloseAt().isAfter(LocalTime.now())){

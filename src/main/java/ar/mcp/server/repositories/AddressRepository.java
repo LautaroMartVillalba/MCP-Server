@@ -3,23 +3,20 @@ package ar.mcp.server.repositories;
 
 import ar.mcp.server.domain.entities.address.Address;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+/**
+ * Repository interface for accessing and managing {@link Address} entities.
+ *
+ * <p>Extends {@link org.springframework.data.jpa.repository.JpaRepository} and
+ * {@link org.springframework.data.jpa.repository.JpaSpecificationExecutor} to provide
+ * CRUD operations and support for dynamic queries using Specifications.</p>
+ */
 @Repository
-public interface AddressRepository extends JpaRepository<Address, Long> {
-
-//    List<Address> findByStateAndStreetAndNumberAndFloorAndDepartmentNumber(String street, String number,String cityCode, String floor, String departmentNumber);
-    @Query("""
-            SELECT DISTINCT a FROM Address a WHERE
-             a.state.code = :stateCode
-            """)
-    List<Address> findByStateCode(String stateCode);
-    @Query("""
-            SELECT DISTINCT a FROM Address a WHERE a.street LIKE :street AND a.number = :number AND a.state.code = :cityCode
-            """)
-    List<Address> findByStreetAndNumberAndCityCode(String street, String number, String cityCode);
+public interface AddressRepository extends JpaRepository<Address, Long>, JpaSpecificationExecutor<Address> {
 
 }

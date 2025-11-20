@@ -1,4 +1,4 @@
-package ar.mcp.server.services;
+package ar.mcp.server.services.reservation;
 
 import ar.mcp.server.domain.dto.*;
 import ar.mcp.server.domain.entities.Person;
@@ -7,6 +7,12 @@ import ar.mcp.server.domain.entities.Room;
 import ar.mcp.server.domain.enums.RoomBookingStatus;
 import ar.mcp.server.domain.enums.RoomState;
 import ar.mcp.server.repositories.ReservationRepository;
+import ar.mcp.server.services.room_booking_period.RoomBookingPeriodService;
+import ar.mcp.server.services.room.RoomService;
+import ar.mcp.server.services.person.PersonService;
+import org.springaicommunity.mcp.annotation.McpTool;
+import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -115,7 +121,7 @@ public class ReservationService {
                     .numberOfNights(res.getNumberOfNights())
                     .endAt(res.getEndAt())
                     .startAt(res.getStartAt())
-                    .personId(res.getClient().getId())
+                    .personId(res.getPerson().getId())
                     .totalPrice(res.getTotalPrice())
                     .roomBookedId(res.getRoomBooked().getId()).build();
 
@@ -126,24 +132,37 @@ public class ReservationService {
     }
 
     /**
-     * Creates a new {@link Reservation} entity, associates it with a person and a room,
+     * Creates a new {@link Reservation} entity for an existing person and a room,
      * and updates the room booking period and room state accordingly.
      *
-     * @param dto        {@link ReservationDTO} containing reservation data.
-     * @param personDTO  {@link PersonDTO} containing person data if a new person is created.
-     * @param addressDTO {@link AddressDTO} containing the person's address if a new person is created.
+     * @param dto      {@link ReservationDTO} containing reservation data.
+     * @param personId ID of the existing person making the reservation.
      * @return The created {@link Reservation} entity.
      * @throws RuntimeException if validation fails for people, dates, or room availability.
      */
+    @McpTool(
+            name = "create_reservation",
+            description = "Crea una nueva reserva asociando una persona, habitación y actualizando su disponibilidad."
+    )
     @Transactional
-    public Reservation createReservation(ReservationDTO dto, PersonDTO personDTO, AddressDTO addressDTO) {
+    public Reservation createReservation(
+            @ToolParam(
+                    required = true,
+                    description = "Objeto ReservationDTO con los datos de la reserva (roomBookedId, startAt, endAt, numberOfPeople)."
+            ) ReservationDTO dto,
+            @ToolParam(
+                    required = true,
+                    description = "ID de la persona que realiza la reserva. Debe ser una persona existente en el sistema."
+            ) Long personId
+    ) {
         //Validate the received data
         Long numberOfNights = validateAndGetReservationDate(dto.getStartAt(), dto.getEndAt());
         validateNumberOfPeople(dto.getNumberOfPeople());
         validateIfTargetRoomIsReserved(dto.getRoomBookedId(), dto.getStartAt(), dto.getEndAt());
 
         //Search relationship objects
-        Person client = personService.getPersonByIdObject(dto.getPersonId()).orElseGet(() -> personService.createPerson(personDTO, addressDTO));
+        Person person = personService.getPersonByIdObject(personId)
+                .orElseThrow(() -> new RuntimeException("Person with ID " + personId + " not found. Create the person first using create_person."));
         Room room = roomService.getRoomById(dto.getRoomBookedId());
 
         //Create new reservation
@@ -153,7 +172,7 @@ public class ReservationService {
                 .startAt(dto.getStartAt())
                 .endAt(dto.getEndAt())
                 .totalPrice(room.getPricePerNight().multiply(BigDecimal.valueOf(numberOfNights)))
-                .client(client)
+                .person(person)
                 .roomBooked(room).build();
 
         //Save reservation and save on an object to access to the ID value.
@@ -182,158 +201,65 @@ public class ReservationService {
      * @throws RuntimeException        if the ID is null or invalid.
      * @throws RuntimeException if the reservation cannot be found.
      */
-    public Reservation getById(Long id) {
+    @McpTool(
+            name = "get_reservation_by_id_object",
+            description = "Obtiene una reserva completa por su ID y la devuelve como entidad Reservation."
+    )
+    public Reservation getById(
+            @ToolParam(
+                    required = true,
+                    description = "ID de la reserva."
+            ) Long id
+    ) {
         validateId(id, "Reservation");
 
         return reservationRepository.findById(id).orElseThrow(() -> new RuntimeException("Register not found in the DataBase."));
     }
 
-    /**
-     * Retrieves a {@link ReservationDTO} by reservation ID.
-     *
-     * @param id ID of the reservation.
-     * @return {@link ReservationDTO} representing the reservation.
-     * @throws RuntimeException        if the ID is null or invalid.
-     * @throws RuntimeException if the reservation cannot be found.
-     */
-    public ReservationDTO getByIdResponse(Long id) {
-        validateId(id, "Reservation");
+    @McpTool(
+            name = "find_reservation_by_spec",
+            description = """
+                Realiza una búsqueda dinámica de reservaciones según los parámetros provistos.
 
-        Reservation result = reservationRepository.findById(id).orElseThrow(() -> new RuntimeException("Register not found in the DataBase."));
-        
-        return ReservationDTO.builder()
-                .numberOfPeople(result.getNumberOfPeople())
-                .numberOfNights(result.getNumberOfNights())
-                .endAt(result.getEndAt())
-                .startAt(result.getStartAt())
-                .personId(result.getClient().getId())
-                .totalPrice(result.getTotalPrice())
-                .roomBookedId(result.getRoomBooked().getId()).build();
-    }
+                Todos los parámetros son opcionales. Si un parámetro no se incluye, se ignora en el filtro.
+                Ejemplo de uso:
+                {
+                  "id": null,
+                  "startAt": null,
+                  "endAt": null,
+                  "numberOfNights": null,
+                  "numberOfPeople": 4,
+                  "totalPrice": null
+                }
 
-    /**
-     * Retrieves all reservations with the specified number of people.
-     *
-     * @param people Number of people in the reservation.
-     * @return List of {@link ReservationDTO} matching the number of people.
-     * @throws RuntimeException if the number of people is not between 1 and 4.
-     */
-    public List<ReservationDTO> getByNumberOfPeople(int people) {
-        if (people < 1 || people > 4) {
-            throw new RuntimeException("Number of people must be between 1 and 4 people.");
-        }
+                En este ejemplo, solo se filtrarán las reservaciones que tengan 4 personas."""
+    )
+    public List<ReservationDTO> findReservationBySpec(
+            @ToolParam(required = false,
+                    description = "Identificador único del registro. No obligatorio.") Long id,
+            @ToolParam(required = false,
+                    description = "Fecha en la que inicia la reservación. No obligatorio.") LocalDate startAt,
+            @ToolParam(required = false,
+                    description = "Fecha en la que finaliza la reservación. No obligatorio.") LocalDate endAt,
+            @ToolParam(required = false,
+                    description = "Número total de noches que dura la reservación. No obligatorio.") Integer numberOfNights,
+            @ToolParam(required = false,
+                    description = "Cantidad de personas incluidas en la reservación. No obligatorio.") Integer numberOfPeople,
+            @ToolParam(required = false,
+                    description = "Precio total de la reservación. No obligatorio.") BigDecimal totalPrice
+    ){
+        Specification<Reservation> specification = Specification.unrestricted();
 
-        return convertFromEntityListToDTOList(reservationRepository.findByNumberOfPeople(people));
-    }
+        specification = specification.and(ReservationSpecifications.hasId(id));
+        specification = specification.and(ReservationSpecifications.hasStartAt(startAt));
+        specification = specification.and(ReservationSpecifications.hasEndAt(endAt));
+        specification = specification.and(ReservationSpecifications.hasNumberOfNights(numberOfNights));
+        specification = specification.and(ReservationSpecifications.hasNumberOfPeople(numberOfPeople));
+        specification = specification.and(ReservationSpecifications.hasTotalPrice(totalPrice));
 
-    /**
-     * Retrieves all reservations with the specified number of nights.
-     *
-     * @param nights Number of nights in the reservation.
-     * @return List of {@link ReservationDTO} matching the number of nights.
-     * @throws RuntimeException if the number of nights is less than 1.
-     */
-    public List<ReservationDTO> getByNumberOfNight(int nights) {
-        if (nights < 1) {
-            throw new RuntimeException("A reservation must be at least at 1 night.");
-        }
+        specification = specification.and(ReservationSpecifications.fetchEverythingForDTO());
 
-        return convertFromEntityListToDTOList(reservationRepository.findByNumberOfNights(nights));
-    }
-
-    /**
-     * Retrieves all reservations matching both the specified number of people and nights.
-     *
-     * @param people Number of people for the reservation.
-     * @param night  Number of nights for the reservation.
-     * @return List of {@link ReservationDTO} matching both criteria.
-     * @throws RuntimeException if the number of people is not between 1 and 4 or nights is less than 1.
-     */
-    public List<ReservationDTO> getByPeopleAndNights(int people, int night) {
-        if (people < 1 || people > 4) {
-            throw new RuntimeException("Number of people must be between 1 and 4 people.");
-        }
-        if (night < 1) {
-            throw new RuntimeException("A reservation must be at least at 1 night.");
-        }
-
-        return convertFromEntityListToDTOList(reservationRepository.findByNumberOfPeopleAndNumberOfNights(people, night));
-    }
-
-    /**
-     * Retrieves all reservations starting on or after the specified date.
-     *
-     * @param date Start date filter.
-     * @return List of {@link ReservationDTO} starting on or after the given date.
-     * @throws RuntimeException if the date is null.
-     */
-    public List<ReservationDTO> getByStartIn(LocalDate date) {
-        if (date == null) {
-            throw new RuntimeException("Date cannot be null.");
-        }
-
-        return convertFromEntityListToDTOList(reservationRepository.findByStartAtGreaterThan(date));
-    }
-
-    /**
-     * Retrieves all reservations ending on or before the specified date.
-     *
-     * @param date End date filter.
-     * @return List of {@link ReservationDTO} ending on or before the given date.
-     * @throws RuntimeException if the date is null.
-     */
-    public List<ReservationDTO> getByFinishIn(LocalDate date) {
-        if (date == null) {
-            throw new RuntimeException("Date cannot be null.");
-        }
-
-        return convertFromEntityListToDTOList(reservationRepository.findByEndAtLessThan(date));
-    }
-
-    /**
-     * Retrieves all reservations between the specified start and end dates.
-     *
-     * @param start Start date of the period.
-     * @param end   End date of the period.
-     * @return List of {@link ReservationDTO} between the given dates.
-     * @throws RuntimeException if either date is null.
-     */
-    public List<ReservationDTO> getByBetweenDates(LocalDate start, LocalDate end) {
-        if (start == null || end == null) {
-            throw new RuntimeException("Date cannot be null.");
-        }
-
-        return convertFromEntityListToDTOList(reservationRepository.findByStartAtGreaterThanAndEndAtLessThan(start, end));
-    }
-
-    /**
-     * Retrieves all reservations associated with a specific room.
-     *
-     * @param roomId ID of the room.
-     * @return List of {@link ReservationDTO} for the specified room.
-     * @throws RuntimeException if the room ID is less than 1.
-     */
-    public List<ReservationDTO> getByRoom(Long roomId) {
-        if (roomId < 1) {
-            throw new RuntimeException("Id cannot be null.");
-        }
-
-        return convertFromEntityListToDTOList(reservationRepository.findByRoom(roomId));
-    }
-
-    /**
-     * Retrieves all reservations associated with a specific client.
-     *
-     * @param clientId ID of the client.
-     * @return List of {@link ReservationDTO} for the specified client.
-     * @throws RuntimeException if the client ID is less than 1.
-     */
-    public List<ReservationDTO> getByClient(Long clientId) {
-        if (clientId < 1) {
-            throw new RuntimeException("Id cannot be null.");
-        }
-
-        return convertFromEntityListToDTOList(reservationRepository.findByPerson(clientId));
+        return convertFromEntityListToDTOList(reservationRepository.findAll(specification));
     }
 
     /**
@@ -346,20 +272,24 @@ public class ReservationService {
      * @throws RuntimeException        if validation fails for people, dates, or room availability.
      * @throws RuntimeException if the reservation cannot be found.
      */
+    @McpTool(
+            name = "update_reservation",
+            description = "Actualiza una reserva existente validando disponibilidad, cantidad de personas y fechas."
+    )
     @Transactional
-    public Reservation update(Long reservationId, ReservationDTO dto) {
+    public Reservation update(
+            @ToolParam(
+                    required = true,
+                    description = "ID de la reserva a actualizar."
+            ) Long reservationId,
+            @ToolParam(
+                    required = true,
+                    description = "Objeto ReservationDTO con los datos actualizados."
+            ) ReservationDTO dto
+    ) {
         validateId(reservationId, "Reservation");
 
         Reservation reservationInDB = reservationRepository.findById(reservationId).orElseThrow(() -> new RuntimeException("Register not found in the DataBase."));
-        if (dto.getRoomBookedId() > 0) {
-            validateIfTargetRoomIsReserved(dto.getRoomBookedId(), dto.getStartAt(), dto.getEndAt());
-            Room room = roomService.getRoomById(dto.getRoomBookedId());
-            reservationInDB.setRoomBooked(room);
-        }
-        if (dto.getNumberOfNights() > 0) {
-            validateIfTargetRoomIsReserved(reservationInDB.getRoomBooked().getId(), dto.getStartAt(), dto.getEndAt());
-            reservationInDB.setNumberOfNights(dto.getNumberOfNights());
-        }
         if (dto.getNumberOfPeople() > 0 && dto.getNumberOfPeople() < 5) {
             reservationInDB.setNumberOfPeople(dto.getNumberOfPeople());
         }
@@ -387,8 +317,17 @@ public class ReservationService {
      * @throws RuntimeException        if the reservation is active or ID is invalid.
      * @throws RuntimeException if the reservation cannot be found.
      */
+    @McpTool(
+            name = "delete_reservation",
+            description = "Elimina una reserva por su ID, liberando la habitación si no se encuentra activa."
+    )
     @Transactional
-    public void delete(Long reservationId) {
+    public void delete(
+            @ToolParam(
+                    required = true,
+                    description = "ID de la reserva a eliminar."
+            ) Long reservationId
+    ) {
         validateId(reservationId, "Reservation");
 
         Reservation reservation = reservationRepository.findById(reservationId).orElseThrow(() -> new RuntimeException("Register not found in the DataBase."));

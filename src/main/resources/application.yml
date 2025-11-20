@@ -1,4 +1,12 @@
 spring:
+  ai:
+    mcp:
+      server:
+        name: mcp-server
+        protocol: streamable
+        stdio: false
+        type: sync
+        enabled: true
   application:
     name: mcp-server
   datasource:

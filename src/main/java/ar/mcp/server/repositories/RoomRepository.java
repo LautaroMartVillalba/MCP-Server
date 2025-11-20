@@ -5,6 +5,7 @@ import ar.mcp.server.domain.enums.BedsType;
 import ar.mcp.server.domain.enums.RoomState;
 import ar.mcp.server.domain.enums.RoomType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
@@ -17,7 +18,7 @@ import java.util.List;
  * based on method names and parameter types.</p>
  */
 @Repository
-public interface RoomRepository extends JpaRepository<Room, Long> {
+public interface RoomRepository extends JpaRepository<Room, Long>, JpaSpecificationExecutor<Room> {
 
     List<Room> findByNumberOfBeds(int beds);
     List<Room> findByBedType(BedsType bedType);

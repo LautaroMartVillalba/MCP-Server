@@ -1,4 +1,4 @@
-package ar.mcp.server.services;
+package ar.mcp.server.services.room_booking_period;
 
 import ar.mcp.server.domain.dto.RoomBookingPeriodDTO;
 import ar.mcp.server.domain.entities.Reservation;
@@ -7,10 +7,15 @@ import ar.mcp.server.domain.entities.RoomBookingPeriod;
 import ar.mcp.server.domain.enums.RoomBookingStatus;
 import ar.mcp.server.repositories.ReservationRepository;
 import ar.mcp.server.repositories.RoomBookingPeriodRepository;
+import ar.mcp.server.services.room.RoomService;
+import org.springaicommunity.mcp.annotation.McpTool;
+import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 
 /**
@@ -59,7 +64,16 @@ public class RoomBookingPeriodService {
      * @throws RuntimeException        if the ID is null or less than 1.
      * @throws RuntimeException if the entity cannot be found.
      */
-    public RoomBookingPeriod getByIdObject (Long id){
+    @McpTool(
+            name = "get_room_booking_period_by_id_object",
+            description = "Obtiene una entidad RoomBookingPeriod por su ID."
+    )
+    public RoomBookingPeriod getByIdObject (
+            @ToolParam(required = true, description = """
+            ID del registro RoomBookingPeriod a obtener.
+            """)
+            Long id
+    ){
         if (id == null || id < 1){
             throw new RuntimeException("Insert a valid id.");
         }
@@ -75,7 +89,16 @@ public class RoomBookingPeriodService {
      * @throws RuntimeException        if the ID is null or less than 1.
      * @throws RuntimeException if the entity cannot be found.
      */
-    public RoomBookingPeriodDTO getByIdResponse (Long id){
+    @McpTool(
+            name = "get_room_booking_period_by_id_response",
+            description = "Obtiene un RoomBookingPeriod en formato DTO por su ID."
+    )
+    public RoomBookingPeriodDTO getByIdResponse (
+            @ToolParam(required = true, description = """
+            ID del registro RoomBookingPeriod a obtener en formato DTO.
+            """)
+            Long id
+    ){
         if (id == null || id < 1){
             throw new RuntimeException("Insert a valid id.");
         }
@@ -114,8 +137,17 @@ public class RoomBookingPeriodService {
      * @return The saved {@link RoomBookingPeriod} entity.
      * @throws RuntimeException if validation fails.
      */
+    @McpTool(
+            name = "create_room_booking_period",
+            description = "Crea un nuevo RoomBookingPeriod con los datos proporcionados."
+    )
     @Transactional
-    public RoomBookingPeriod create(RoomBookingPeriodDTO dto){
+    public RoomBookingPeriod create(
+            @ToolParam(required = true, description = """
+            Objeto DTO con los datos del nuevo RoomBookingPeriod.
+            """)
+            RoomBookingPeriodDTO dto
+    ){
         validate(dto.getStartAt(), dto.getEndAt(), dto.getRoomId(), dto.getReservationId());
         Room room = roomService.getRoomById(dto.getRoomId());
         Reservation reservation = reservationRepository.findById(dto.getReservationId()).orElseThrow();
@@ -132,81 +164,44 @@ public class RoomBookingPeriodService {
         return register;
     }
 
-    /**
-     * Retrieves all RoomBookingPeriods starting after a given date.
-     *
-     * @param startAt Start date filter.
-     * @return List of {@link RoomBookingPeriodDTO}.
-     * @throws RuntimeException if the date is null.
-     */
-    public List<RoomBookingPeriodDTO> getByStartAt(LocalDate startAt){
-        if (startAt == null){
-            throw new RuntimeException("Date cannot be null.");
-        }
+    @McpTool(
+            name = "find_roombookingperiod_by_spec",
+            description = """
+                Realiza una búsqueda dinámica en los registros de habitaciones reservadas según los parámetros provistos.
 
-        return convertEntityToDTO(repository.findByStartAtGreaterThan(startAt));
-    }
+                Todos los parámetros son opcionales. Si un parámetro no se incluye, se ignora en el filtro.
+                Ejemplo de uso:
+                {
+                  "id": null,
+                  "status": "RESERVED",
+                  "startAt": null,
+                  "endAt": null
+                }
 
-    /**
-     * Retrieves all RoomBookingPeriods ending before a given date.
-     *
-     * @param endAt End date filter.
-     * @return List of {@link RoomBookingPeriodDTO}.
-     * @throws RuntimeException if the date is null or before today.
-     */
-    public List<RoomBookingPeriodDTO> getByEndAt(LocalDate endAt){
-        if (endAt == null || endAt.isBefore(LocalDate.now())){
+                En este ejemplo, solo se filtrarán los registros que tengan el estado RESERVED."""
+    )
+    public List<RoomBookingPeriodDTO> findRoomBookingPeriodBySpec(
+            @ToolParam(required = false,
+                    description = "Identificador único del registro. No obligatorio.") Long id,
+            @ToolParam(required = false,
+                    description = """
+                            Estado del registro de reservación.
+                            Sus valores pueden ser RESERVED, CANCELLED, COMPLETED o BLOCKED. No obligatorio.""") RoomBookingStatus status,
+            @ToolParam(required = false,
+                    description = "Fecha de inicio de la reservación. No obligatorio.") LocalDate startAt,
+            @ToolParam(required = false,
+                    description = "Fecha de finalización de la reservación. No obligatorio.") LocalDate endAt
+    ){
+        Specification<RoomBookingPeriod> specification = Specification.unrestricted();
 
-            throw new RuntimeException("Date cannot be null.");
-        }
+        specification = specification.and(RoomBookingPeriodSpecifications.hasId(id));
+        specification = specification.and(RoomBookingPeriodSpecifications.hasStatus(status));
+        specification = specification.and(RoomBookingPeriodSpecifications.hasStartAt(startAt));
+        specification = specification.and(RoomBookingPeriodSpecifications.hasEndAt(endAt));
 
-        return convertEntityToDTO(repository.findByEndAtLessThan(endAt));
-    }
+        specification = specification.and(RoomBookingPeriodSpecifications.fetchEverythingForDTO());
 
-    /**
-     * Retrieves all RoomBookingPeriods between the specified start and end dates.
-     *
-     * @param startAt Start date.
-     * @param endAt   End date.
-     * @return List of {@link RoomBookingPeriodDTO}.
-     * @throws RuntimeException if dates are invalid or in the wrong order.
-     */
-    public List<RoomBookingPeriodDTO> getByStarAndEndBetween(LocalDate startAt, LocalDate endAt){
-        if (startAt == null || endAt == null || endAt.isBefore(LocalDate.now()) || startAt.isAfter(endAt)){
-            throw new RuntimeException("Start date have to be before end date. Please, insert dates data correctly.");
-        }
-
-        return convertEntityToDTO(repository.findByStartAtGreaterThanAndEndAtLessThan(startAt, endAt));
-    }
-
-    /**
-     * Retrieves all RoomBookingPeriods filtered by status.
-     *
-     * @param status {@link RoomBookingStatus} to filter by.
-     * @return List of {@link RoomBookingPeriodDTO}.
-     * @throws RuntimeException if status is null.
-     */
-    public List<RoomBookingPeriodDTO> getByStatusRegister(RoomBookingStatus status){
-        if (status == null){
-            throw new RuntimeException("Please, set a valid status.");
-        }
-
-        return convertEntityToDTO(repository.findByStatus(status));
-    }
-
-    /**
-     * Retrieves all RoomBookingPeriods for a specific room.
-     *
-     * @param roomId ID of the room.
-     * @return List of {@link RoomBookingPeriodDTO}.
-     * @throws RuntimeException if roomId is null or invalid.
-     */
-    public List<RoomBookingPeriodDTO> getByRoomId(Long roomId){
-        if (roomId == null || roomId < 1){
-            throw new RuntimeException("Insert a valid room id.");
-        }
-
-        return convertEntityToDTO(repository.findByRoom(roomId));
+        return convertEntityToDTO(repository.findAll(specification));
     }
 
     /**
@@ -217,8 +212,21 @@ public class RoomBookingPeriodService {
      * @return Updated {@link RoomBookingPeriodDTO}.
      * @throws RuntimeException if validation fails.
      */
+    @McpTool(
+            name = "update_room_booking_period_info",
+            description = "Actualiza fechas o habitación asociada de un RoomBookingPeriod."
+    )
     @Transactional
-    public RoomBookingPeriodDTO updateInfo(Long roomBookingPeriodId, RoomBookingPeriodDTO dto){
+    public RoomBookingPeriodDTO updateInfo(
+            @ToolParam(required = true, description = """
+            ID del RoomBookingPeriod que se desea actualizar.
+            """)
+            Long roomBookingPeriodId,
+            @ToolParam(required = true, description = """
+            Objeto DTO con los nuevos datos de la reserva (fechas o habitación).
+            """)
+            RoomBookingPeriodDTO dto
+    ){
         RoomBookingPeriod registerInDB = this.getByIdObject(roomBookingPeriodId);
 
         if (dto.getStartAt() != null){
@@ -250,8 +258,21 @@ public class RoomBookingPeriodService {
      * @param status              {@link RoomBookingStatus} to set.
      * @return Updated {@link RoomBookingPeriodDTO}.
      */
+    @McpTool(
+            name = "update_room_booking_period_status",
+            description = "Actualiza el estado de un RoomBookingPeriod."
+    )
     @Transactional
-    public RoomBookingPeriodDTO updateStatus(Long roomBookingPeriodId, RoomBookingStatus status){
+    public RoomBookingPeriodDTO updateStatus(
+            @ToolParam(required = true, description = """
+            ID del RoomBookingPeriod a modificar.
+            """)
+            Long roomBookingPeriodId,
+            @ToolParam(required = true, description = """
+            Nuevo estado que se desea asignar al registro (por ejemplo: RESERVED, CANCELED, COMPLETED).
+            """)
+            RoomBookingStatus status
+    ){
         RoomBookingPeriod registerInDB = this.getByIdObject(roomBookingPeriodId);
 
         if (status != null){
@@ -275,8 +296,17 @@ public class RoomBookingPeriodService {
      * @param id ID of the RoomBookingPeriod to delete.
      * @throws RuntimeException        if the period cannot be deleted or ID is invalid.
      */
+    @McpTool(
+            name = "delete_room_booking_period",
+            description = "Elimina un RoomBookingPeriod si su estado es CANCELED o COMPLETED."
+    )
     @Transactional
-    public void delete (Long id){
+    public void delete (
+            @ToolParam(required = true, description = """
+            ID del RoomBookingPeriod a eliminar.
+            """)
+            Long id
+    ){
         if (id == null || id < 1){
             throw new RuntimeException("Id cannot be null.");
         }
