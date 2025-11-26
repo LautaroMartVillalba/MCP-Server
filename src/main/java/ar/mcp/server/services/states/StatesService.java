@@ -86,15 +86,7 @@ public class StatesService {
      * @param stateCode Code of the state.
      * @return StatesDTO corresponding to the given state code.
      */
-    @McpTool(
-            name = "get_state_by_code_response",
-            description = "Obtiene un estado en formato DTO a partir de su código."
-    )
-    public StatesDTO getStateByCodeResponse(
-            @ToolParam(
-                    required = true,
-                    description = "Código del estado a buscar."
-            ) String stateCode) {
+    public StatesDTO getStateByCodeResponse(String stateCode) {
         log.debug("Buscando estado por código: {}", stateCode);
         if (stateCode.isBlank()) {
             throw new RuntimeException("Insert a state' code, please.");
@@ -116,15 +108,7 @@ public class StatesService {
      * @param stateCode Code of the state.
      * @return States entity corresponding to the given state code.
      */
-    @McpTool(
-            name = "get_state_by_code_object",
-            description = "Obtiene una entidad States a partir de su código."
-    )
-    public States getStateByCodeObject(
-            @ToolParam(
-                    required = true,
-                    description = "Código del estado a buscar."
-            ) String stateCode) {
+    public States getStateByCodeObject(String stateCode) {
         log.debug("Recuperando entidad States con código: {}", stateCode);
         if (stateCode.isBlank()) {
             throw new RuntimeException("Insert a state code, please.");
@@ -141,15 +125,7 @@ public class StatesService {
      * @param countryCode Code of the country.
      * @return List of StatesDTO for the specified country code.
      */
-    @McpTool(
-            name = "get_state_by_country_code",
-            description = "Obtiene una lista de StatesDTO a partir del código de país."
-    )
-    public List<StatesDTO> getStateByCountryCode(
-            @ToolParam(
-                    required = true,
-                    description = "Código del país para filtrar los estados."
-            ) String countryCode) {
+    public List<StatesDTO> getStateByCountryCode(String countryCode) {
         log.debug("Buscando estados por código de país: {}", countryCode);
         if (countryCode.isBlank()) {
             throw new RuntimeException("Insert a country code, please.");

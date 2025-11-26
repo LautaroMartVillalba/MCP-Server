@@ -1,8 +1,12 @@
 package ar.mcp.server.services.reservation;
 
+import ar.mcp.server.domain.entities.Person;
 import ar.mcp.server.domain.entities.Reservation;
+import ar.mcp.server.domain.entities.Room;
 import jakarta.persistence.criteria.Fetch;
+import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.JoinType;
+import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
@@ -59,15 +63,72 @@ public class ReservationSpecifications {
         };
     }
 
+    /**
+     * Filters reservations where the start date falls within a specified date range (inclusive).
+     *
+     * @param startDate minimum start date (inclusive). Null will be ignored.
+     * @param endDate maximum start date (inclusive). Null will be ignored.
+     * @return Specification for date range or null when both inputs are null.
+     */
+    public static Specification<Reservation> hasStartAtBetween(LocalDate startDate, LocalDate endDate){
+        return (root, query, criteriaBuilder) -> {
+            if (startDate == null && endDate == null) return null;
+
+            Predicate predicate = criteriaBuilder.conjunction();
+            
+            if (startDate != null) {
+                predicate = criteriaBuilder.and(predicate, 
+                    criteriaBuilder.greaterThanOrEqualTo(root.get("startAt"), startDate));
+            }
+            
+            if (endDate != null) {
+                predicate = criteriaBuilder.and(predicate, 
+                    criteriaBuilder.lessThanOrEqualTo(root.get("startAt"), endDate));
+            }
+            
+            return predicate;
+        };
+    }
+
+    /**
+     * Filters reservations by the hotel ID of the booked room.
+     *
+     * @param hotelId the hotel ID to filter by. Null or < 1 will be ignored.
+     * @return Specification for hotel ID or null when input is invalid.
+     */
+    public static Specification<Reservation> hasHotelId(Long hotelId){
+        return (root, query, criteriaBuilder) -> {
+            if (hotelId == null || hotelId < 1) return null;
+
+            Join<Reservation, Room> roomJoin = root.join("roomBooked", JoinType.INNER);
+            
+            return criteriaBuilder.equal(roomJoin.get("hotel").get("id"), hotelId);
+        };
+    }
+
+    /**
+     * Filters reservations by the person/client ID who made the reservation.
+     *
+     * @param personId the person ID to filter by. Null or < 1 will be ignored.
+     * @return Specification for person ID or null when input is invalid.
+     */
+    public static Specification<Reservation> hasPersonId(Long personId){
+        return (root, query, criteriaBuilder) -> {
+            if (personId == null || personId < 1) return null;
+
+            return criteriaBuilder.equal(root.get("person").get("id"), personId);
+        };
+    }
+
     public static Specification<Reservation> fetchEverythingForDTO() {
         /**
-         * Fetches associations necessary for reservation DTOs (client and roomBooked).
+         * Fetches associations necessary for reservation DTOs (person and roomBooked).
          *
          * @return Specification that performs LEFT fetch joins and marks the query distinct
          */
         return (root, query, criteriaBuilder) -> {
             if (Reservation.class.equals(query.getResultType())) {
-                root.fetch("client", JoinType.LEFT);
+                root.fetch("person", JoinType.LEFT);
                 root.fetch("roomBooked", JoinType.LEFT);
                 query.distinct(true);
             }

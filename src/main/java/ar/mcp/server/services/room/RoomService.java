@@ -157,11 +157,14 @@ public class RoomService {
                   "peopleCapacity": null,
                   "roomState": null,
                   "timesBooked": null,
-                  "maxPrice": null,
-                  "minPrice": null
+                  "exactPrice": null,
+                  "minPrice": 100,
+                  "maxPrice": 300
                 }
 
-                En este ejemplo, solo se filtrarán las habitaciones que estén en el piso 4."""
+                En este ejemplo, se filtrarán las habitaciones que:
+                - Estén en el piso 4
+                - Tengan precio entre 100 y 300"""
     )
     public List<RoomDTO> findRoomBySpec(
             @ToolParam(required = false,
@@ -169,43 +172,37 @@ public class RoomService {
             @ToolParam(required = false,
                     description = "Piso en el que se encuentra la habitación. No obligatorio.") Integer floor,
             @ToolParam(required = false,
-                    description = """
-                            Tipo de habitación. Sus valores pueden ser
-                            STANDARD DELUXE, SUITE, EXECUTIVE o PRESIDENTIAL.
-                            No obligatorio.""") RoomType roomType,
+                    description = "Tipo de habitación. Sus valores pueden ser STANDARD, DELUXE, SUITE, EXECUTIVE o PRESIDENTIAL. No obligatorio.") RoomType roomType,
             @ToolParam(required = false,
-                    description = """
-                            Tipos de cama que tiene la habitación. Sus valores pueden ser
-                            SINGLE, DOUBLE, QUEEN, KING o TWIN. No obligatorio.""") BedsType bedsType,
+                    description = "Tipos de cama que tiene la habitación. Sus valores pueden ser SINGLE, DOUBLE, QUEEN, KING o TWIN. No obligatorio.") BedsType bedsType,
             @ToolParam(required = false,
                     description = "Cantidad de camas. No obligatorio.") Integer numberOfBeds,
             @ToolParam(required = false,
                     description = "Cantidad de personas que puede albergar. No obligatorio.") Integer peopleCapacity,
             @ToolParam(required = false,
-                    description = """
-                            Estado en el que se encuentra la habitación. sus valores
-                            pueden ser OCCUPIED, UNOCCUPIED, BEING_CLEANED, CLEANED,
-                            FREE o RESERVED. No obligatorio.""") RoomState roomState,
+                    description = "Estado en el que se encuentra la habitación. Sus valores pueden ser OCCUPIED, UNOCCUPIED, BEING_CLEANED, CLEANED, FREE o RESERVED. No obligatorio.") RoomState roomState,
             @ToolParam(required = false,
                     description = "Cantidad de veces que la habitación ha sido reservada. No obligatorio.") Integer timesBooked,
             @ToolParam(required = false,
-                    description = "Precio máximo por el cual se filtra. No obligatorio.") BigDecimal maxPrice,
+                    description = "Precio exacto por noche por el cual filtrar. No obligatorio.") BigDecimal exactPrice,
             @ToolParam(required = false,
-                    description = "Precio mínimo por el cual se filtra. No obligatorio.") BigDecimal minPrice
+                    description = "Precio mínimo por noche (inclusive). No obligatorio.") BigDecimal minPrice,
+            @ToolParam(required = false,
+                    description = "Precio máximo por noche (inclusive). No obligatorio.") BigDecimal maxPrice
     ){
         log.debug("find_room_by_spec");
         Specification<Room> specification = Specification.unrestricted();
 
-        specification.and(RoomSpecifications.hasId(id));
-        specification.and(RoomSpecifications.hasFloor(floor));
-        specification.and(RoomSpecifications.hasRoomType(roomType));
-        specification.and(RoomSpecifications.hasBedType(bedsType));
-        specification.and(RoomSpecifications.hasNumberOfBeds(numberOfBeds));
-        specification.and(RoomSpecifications.hasPeopleCapacity(peopleCapacity));
-        specification.and(RoomSpecifications.hasState(roomState));
-        specification.and(RoomSpecifications.hasTimesBooked(timesBooked));
-        specification.and(RoomSpecifications.pricePerNightLessThan(maxPrice));
-        specification.and(RoomSpecifications.pricePerNightGreaterThan(minPrice));
+        specification = specification.and(RoomSpecifications.hasId(id));
+        specification = specification.and(RoomSpecifications.hasFloor(floor));
+        specification = specification.and(RoomSpecifications.hasRoomType(roomType));
+        specification = specification.and(RoomSpecifications.hasBedType(bedsType));
+        specification = specification.and(RoomSpecifications.hasNumberOfBeds(numberOfBeds));
+        specification = specification.and(RoomSpecifications.hasPeopleCapacity(peopleCapacity));
+        specification = specification.and(RoomSpecifications.hasState(roomState));
+        specification = specification.and(RoomSpecifications.hasTimesBooked(timesBooked));
+        specification = specification.and(RoomSpecifications.hasExactPrice(exactPrice));
+        specification = specification.and(RoomSpecifications.hasPriceInRange(minPrice, maxPrice));
 
         specification = specification.and(RoomSpecifications.fetchEverythingForDTO());
 
@@ -219,16 +216,7 @@ public class RoomService {
      * @return Room entity corresponding to the given ID.
      * @throws RuntimeException if no room is found.
      */
-    @McpTool(
-            name = "get_room_by_id_object",
-            description = "Obtiene una entidad Room completa por su ID."
-    )
-    public Room getRoomById(
-            @ToolParam(required = true, description = """
-            ID único de la habitación a obtener como entidad.
-            """)
-            Long id
-    ){
+    public Room getRoomById(Long id){
         log.debug("get_room_by_id_object");
         return roomRepository.findById(id).orElseThrow(() -> new RuntimeException("Register not found in the DataBase."));
     }
@@ -241,20 +229,7 @@ public class RoomService {
      * @return List of free RoomDTO objects.
      * @throws RuntimeException if dates are null or invalid.
      */
-    @McpTool(
-            name = "get_free_rooms_by_schedule_between",
-            description = "Obtiene todas las habitaciones disponibles dentro de un rango de fechas dado."
-    )
-    public List<RoomDTO> getFreeRoomsByScheduleBetween(
-            @ToolParam(required = true, description = """
-            Fecha de inicio del rango de búsqueda.
-            """)
-            LocalDate startAt,
-            @ToolParam(required = true, description = """
-            Fecha de finalización del rango de búsqueda.
-            """)
-            LocalDate endAt
-    ){
+    public List<RoomDTO> getFreeRoomsByScheduleBetween(LocalDate startAt,LocalDate endAt){
         log.debug("get_free_rooms_by_schedule_between");
         if (startAt == null || endAt == null || startAt.isBefore(LocalDate.now()) || endAt.isBefore(startAt)){
             throw new RuntimeException("Insert correct date, please.");

@@ -174,30 +174,38 @@ public class RoomBookingPeriodService {
                 {
                   "id": null,
                   "status": "RESERVED",
-                  "startAt": null,
-                  "endAt": null
+                  "searchStartDate": "2025-01-01",
+                  "searchEndDate": "2025-12-31",
+                  "hotelId": 3,
+                  "personId": null
                 }
 
-                En este ejemplo, solo se filtrarán los registros que tengan el estado RESERVED."""
+                En este ejemplo, se filtrarán registros que:
+                - Tengan estado RESERVED
+                - Inicien entre 2025-01-01 y 2025-12-31
+                - Pertenezcan al hotel con ID 3"""
     )
     public List<RoomBookingPeriodDTO> findRoomBookingPeriodBySpec(
             @ToolParam(required = false,
                     description = "Identificador único del registro. No obligatorio.") Long id,
             @ToolParam(required = false,
-                    description = """
-                            Estado del registro de reservación.
-                            Sus valores pueden ser RESERVED, CANCELLED, COMPLETED o BLOCKED. No obligatorio.""") RoomBookingStatus status,
+                    description = "Estado del registro de reservación. Sus valores pueden ser RESERVED, CANCELLED, COMPLETED o BLOCKED. No obligatorio.") RoomBookingStatus status,
             @ToolParam(required = false,
-                    description = "Fecha de inicio de la reservación. No obligatorio.") LocalDate startAt,
+                    description = "Fecha mínima de inicio de búsqueda (inclusive). Para buscar períodos en un rango. No obligatorio.") LocalDate searchStartDate,
             @ToolParam(required = false,
-                    description = "Fecha de finalización de la reservación. No obligatorio.") LocalDate endAt
+                    description = "Fecha máxima de inicio de búsqueda (inclusive). Para buscar períodos en un rango. No obligatorio.") LocalDate searchEndDate,
+            @ToolParam(required = false,
+                    description = "ID del hotel al que pertenece la habitación del período. No obligatorio.") Long hotelId,
+            @ToolParam(required = false,
+                    description = "ID de la persona/cliente asociada a la reservación del período. No obligatorio.") Long personId
     ){
         Specification<RoomBookingPeriod> specification = Specification.unrestricted();
 
         specification = specification.and(RoomBookingPeriodSpecifications.hasId(id));
         specification = specification.and(RoomBookingPeriodSpecifications.hasStatus(status));
-        specification = specification.and(RoomBookingPeriodSpecifications.hasStartAt(startAt));
-        specification = specification.and(RoomBookingPeriodSpecifications.hasEndAt(endAt));
+        specification = specification.and(RoomBookingPeriodSpecifications.hasStartAtBetween(searchStartDate, searchEndDate));
+        specification = specification.and(RoomBookingPeriodSpecifications.hasHotelId(hotelId));
+        specification = specification.and(RoomBookingPeriodSpecifications.hasPersonId(personId));
 
         specification = specification.and(RoomBookingPeriodSpecifications.fetchEverythingForDTO());
 

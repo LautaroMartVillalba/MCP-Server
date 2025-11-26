@@ -3,6 +3,7 @@ package ar.mcp.server.services.room;
 import ar.mcp.server.domain.entities.Room;
 import jakarta.persistence.criteria.Fetch;
 import jakarta.persistence.criteria.JoinType;
+import jakarta.persistence.criteria.Predicate;
 import ar.mcp.server.domain.enums.BedsType;
 import ar.mcp.server.domain.enums.RoomState;
 import ar.mcp.server.domain.enums.RoomType;
@@ -94,39 +95,60 @@ public class RoomSpecifications {
         };
     }
 
-    public static Specification<Room> pricePerNightGreaterThan(BigDecimal price) {
-        /**
-         * Filters rooms with price per night greater than provided value.
-         *
-         * @param price threshold price; ignored when null or <= 0
-         * @return Specification comparing `pricePerNight` greater than `price` or null when input invalid
-         */
+    /**
+     * Filters rooms with price per night within a specified range (inclusive).
+     *
+     * @param minPrice minimum price per night (inclusive). Null will be ignored.
+     * @param maxPrice maximum price per night (inclusive). Null will be ignored.
+     * @return Specification for price range or null when both inputs are null.
+     */
+    public static Specification<Room> hasPriceInRange(BigDecimal minPrice, BigDecimal maxPrice) {
         return (root, query, criteriaBuilder) -> {
-            if (price == null || price.doubleValue() <= 0) return null;
+            if (minPrice == null && maxPrice == null) return null;
 
-            return criteriaBuilder.greaterThan(root.get("pricePerNight"), price);
+            Predicate predicate = criteriaBuilder.conjunction();
+            
+            if (minPrice != null) {
+                predicate = criteriaBuilder.and(predicate, 
+                    criteriaBuilder.greaterThanOrEqualTo(root.get("pricePerNight"), minPrice));
+            }
+            
+            if (maxPrice != null) {
+                predicate = criteriaBuilder.and(predicate, 
+                    criteriaBuilder.lessThanOrEqualTo(root.get("pricePerNight"), maxPrice));
+            }
+            
+            return predicate;
         };
     }
 
-    public static Specification<Room> pricePerNightLessThan(BigDecimal price) {
+    /**
+     * Filters rooms with exact price per night.
+     *
+     * @param price exact price to match. Null or <= 0 will be ignored.
+     * @return Specification for exact price or null when input is invalid.
+     */
+    public static Specification<Room> hasExactPrice(BigDecimal price) {
         return (root, query, criteriaBuilder) -> {
             if (price == null || price.doubleValue() <= 0) return null;
 
-            return criteriaBuilder.lessThan(root.get("pricePerNight"), price);
+            return criteriaBuilder.equal(root.get("pricePerNight"), price);
         };
     }
 
     public static Specification<Room> fetchEverythingForDTO() {
         /**
          * Fetches associations required to map `Room` to its DTO without N+1.
+         * Note: Only fetches hotel to avoid "cannot simultaneously fetch multiple bags" error.
+         * Collections (reservation, roomBookingPeriod) will be lazy-loaded.
          *
-         * @return Specification that performs LEFT fetch joins for hotel, reservation and roomBookingPeriod
+         * @return Specification that performs LEFT fetch join for hotel
          */
         return (root, query, criteriaBuilder) -> {
             if (Room.class.equals(query.getResultType())) {
                 root.fetch("hotel", JoinType.LEFT);
-                root.fetch("reservation", JoinType.LEFT);
-                root.fetch("roomBookingPeriod", JoinType.LEFT);
+                // Note: Cannot fetch both 'reservation' and 'roomBookingPeriod' simultaneously (multiple bags error)
+                // These will be lazy-loaded or loaded in separate queries
                 query.distinct(true);
             }
             return criteriaBuilder.conjunction();

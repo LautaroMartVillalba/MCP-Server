@@ -56,6 +56,7 @@ public class Attraction {
     private LocalTime closeAt;
     @NotNull
     @ManyToMany(mappedBy = "attractions")
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private List<Hotel> hotels = new ArrayList<>();
 
 

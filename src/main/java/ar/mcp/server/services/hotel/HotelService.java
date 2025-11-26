@@ -8,6 +8,7 @@ import ar.mcp.server.domain.entities.Hotel;
 import ar.mcp.server.domain.entities.Room;
 import ar.mcp.server.domain.entities.address.Address;
 import ar.mcp.server.domain.entities.address.HotelAddress;
+import ar.mcp.server.domain.enums.RoomType;
 import ar.mcp.server.repositories.HotelRepository;
 import ar.mcp.server.services.address.AddressService;
 import ar.mcp.server.services.attraction.AttractionService;
@@ -21,6 +22,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -187,24 +189,31 @@ public class HotelService {
 
     /**
     * Performs a dynamic search of {@link Hotel} entities based on multiple optional parameters.
-    * Each non-null parameter in the provided {@link HotelDTO} will be included as a filtering criterion.
+    * Each non-null parameter will be included as a filtering criterion.
     * <p>
-    * The search criteria may include hotel name, star rating, total rooms, free rooms, reserved rooms,
-    * and contact phone number.
+    * The search criteria may include hotel name, star rating range, total rooms, free rooms, reserved rooms,
+    * contact phone number, room price range, room category, and keywords for attractions/benefits.
     * <p>
     * Example JSON format expected by the LLM:
     * <pre>
     * {
     *   "name": "Hotel Central",
-    *   "stars": 4,
-    *   "totalRooms": 300,
+    *   "stars": null,
+    *   "minStars": 4.0,
+    *   "maxStars": 5.0,
+    *   "totalRooms": null,
     *   "freeRooms": null,
     *   "reservedRooms": null,
-    *   "contactPhone": null
+    *   "contactPhone": null,
+    *   "minRoomPrice": 100,
+    *   "maxRoomPrice": 300,
+    *   "roomType": "PRESIDENTIAL",
+    *   "attractionKeywords": ["spa", "piscina"],
+    *   "benefitKeywords": ["desayuno", "wifi"]
     * }
     * </pre>
     *
-    * @return List of {@link Hotel} entities that match the specified criteria.
+    * @return List of {@link HotelDTO} entities that match the specified criteria.
     */
     @McpTool(name = "find_hotel_by_spec",
             description = """
@@ -214,21 +223,37 @@ public class HotelService {
                 Ejemplo de uso:
                 {
                   "name": null,
-                  "stars": 5,
+                  "stars": null,
+                  "minStars": 4.0,
+                  "maxStars": 5.0,
                   "totalRooms": null,
                   "freeRooms": null,
                   "reservedRooms": null,
-                  "contactPhone": null
+                  "contactPhone": null,
+                  "minRoomPrice": 100,
+                  "maxRoomPrice": 300,
+                  "roomType": "PRESIDENTIAL",
+                  "attractionKeywords": ["spa", "piscina"],
+                  "benefitKeywords": ["desayuno", "wifi"]
                 }
 
-                En este ejemplo, solo se filtrarán los hoteles con 5 estrellas.
+                En este ejemplo, se buscan hoteles con:
+                - Calificación entre 4 y 5 estrellas
+                - Habitaciones con precio entre 100 y 300
+                - Habitaciones tipo PRESIDENTIAL
+                - Atracciones que mencionen spa o piscina
+                - Beneficios que mencionen desayuno o wifi
                 """
     )
     public List<HotelDTO> findHotelBySpec(
             @ToolParam(required = false,
                     description = "Nombre del hotel. No obligatorio.") String name,
             @ToolParam(required = false,
-                    description = "Puntuación del hotel. Puede ser decimal o entero. No obligatorio.") Double stars,
+                    description = "Puntuación exacta del hotel. Puede ser decimal o entero. No obligatorio.") Double stars,
+            @ToolParam(required = false,
+                    description = "Puntuación mínima del hotel (inclusive). No obligatorio.") Double minStars,
+            @ToolParam(required = false,
+                    description = "Puntuación máxima del hotel (inclusive). No obligatorio.") Double maxStars,
             @ToolParam(required = false,
                     description = "Total de habitaciones que tiene el hotel. No obligatorio.") Integer totalRooms,
             @ToolParam(required = false,
@@ -236,19 +261,36 @@ public class HotelService {
             @ToolParam(required = false,
                     description = "Cantidad de habitaciones que se encuentran reservadas. No obligatorio.") Integer reservedRooms,
             @ToolParam(required = false,
-                    description = "Número telefónico de contacto del hotel. No obligatorio.") String contactPhone
-
+                    description = "Número telefónico de contacto del hotel. No obligatorio.") String contactPhone,
+            @ToolParam(required = false,
+                    description = "Precio mínimo por noche de habitación (inclusive). No obligatorio.") BigDecimal minRoomPrice,
+            @ToolParam(required = false,
+                    description = "Precio máximo por noche de habitación (inclusive). No obligatorio.") BigDecimal maxRoomPrice,
+            @ToolParam(required = false,
+                    description = "Tipo/categoría de habitación. Valores: STANDARD, DELUXE, SUITE, EXECUTIVE, PRESIDENTIAL. No obligatorio.") RoomType roomType,
+            @ToolParam(required = false,
+                    description = "Lista de palabras clave para buscar en descripciones de atracciones. Lógica OR (cualquier coincidencia). Ejemplo: [\"spa\", \"piscina\", \"jacuzzi\"]. No obligatorio.") List<String> attractionKeywords,
+            @ToolParam(required = false,
+                    description = "Lista de palabras clave para buscar en descripciones de beneficios. Lógica OR (cualquier coincidencia). Ejemplo: [\"desayuno\", \"wifi\", \"estacionamiento\"]. No obligatorio.") List<String> benefitKeywords
     ){
-        log.debug("Buscando hoteles con parámetros: name={}, stars={}, totalRooms={}", name, stars, totalRooms);
+        log.debug("Buscando hoteles con parámetros: name={}, stars={}, minStars={}, maxStars={}, roomType={}", 
+                name, stars, minStars, maxStars, roomType);
 
         Specification<Hotel> specification = Specification.unrestricted();
 
-        specification.and(HotelSpecifications.hasName(name));
-        specification.and(HotelSpecifications.hasStars(stars));
-        specification.and(HotelSpecifications.hasTotalRooms(totalRooms));
-        specification.and(HotelSpecifications.hasFreeRooms(freeRooms));
-        specification.and(HotelSpecifications.hasReservedRooms(reservedRooms));
-        specification.and(HotelSpecifications.hasContactPhone(contactPhone));
+        specification = specification.and(HotelSpecifications.hasName(name));
+        specification = specification.and(HotelSpecifications.hasStars(stars));
+        specification = specification.and(HotelSpecifications.hasStarsInRange(minStars, maxStars));
+        specification = specification.and(HotelSpecifications.hasTotalRooms(totalRooms));
+        specification = specification.and(HotelSpecifications.hasFreeRooms(freeRooms));
+        specification = specification.and(HotelSpecifications.hasReservedRooms(reservedRooms));
+        specification = specification.and(HotelSpecifications.hasContactPhone(contactPhone));
+        specification = specification.and(HotelSpecifications.hasRoomsWithPriceInRange(minRoomPrice, maxRoomPrice));
+        specification = specification.and(HotelSpecifications.hasRoomsOfType(roomType));
+        specification = specification.and(HotelSpecifications.hasAttractionsWithDescriptionKeywords(attractionKeywords));
+        specification = specification.and(HotelSpecifications.hasBenefitsWithDescriptionKeywords(benefitKeywords));
+        
+        specification = specification.and(HotelSpecifications.fetchEverythingForDTO());
 
         List<HotelDTO> result = convertFromHotelListToHotelDTOList(hotelRepository.findAll(specification));
         log.debug("Búsqueda completada. Hoteles encontrados: {}", result.size());
@@ -262,16 +304,7 @@ public class HotelService {
      * @return Hotel entity with the given ID.
      * @throws RuntimeException if the ID is invalid or the hotel is not found.
      */
-    @McpTool(
-            name = "get_hotel_by_id_object",
-            description = "Obtiene una entidad Hotel por su ID."
-    )
-    public Hotel getHotelByIdObject(
-            @ToolParam(
-                    required = true,
-                    description = "ID del hotel a buscar."
-            ) Long id
-    ){
+    public Hotel getHotelByIdObject(Long id){
         log.debug("Recuperando hotel con ID: {}", id);
         if (id <= 0){
             throw new RuntimeException("Id cannot be null");

@@ -53,13 +53,15 @@ public class BenefitSpecifications {
 
     public static Specification<Benefit> fetchEverythingForDTO() {
         /**
-         * Fetches the `hotel` association when projecting to DTOs.
+         * Fetches associations for DTO mapping.
+         * Note: Benefit has ManyToMany with hotels (mapped by Hotel), not a single hotel reference.
+         * No fetch needed here as hotels collection would cause circular reference issues.
          *
-         * @return Specification that performs a LEFT fetch join on `hotel`
+         * @return Specification that marks query as distinct
          */
         return (root, query, criteriaBuilder) -> {
             if (Benefit.class.equals(query.getResultType())) {
-                root.fetch("hotel", JoinType.LEFT);
+                // No fetch: 'hotels' is a collection managed by Hotel side
                 query.distinct(true);
             }
             return criteriaBuilder.conjunction();

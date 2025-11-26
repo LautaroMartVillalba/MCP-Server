@@ -201,16 +201,7 @@ public class ReservationService {
      * @throws RuntimeException        if the ID is null or invalid.
      * @throws RuntimeException if the reservation cannot be found.
      */
-    @McpTool(
-            name = "get_reservation_by_id_object",
-            description = "Obtiene una reserva completa por su ID y la devuelve como entidad Reservation."
-    )
-    public Reservation getById(
-            @ToolParam(
-                    required = true,
-                    description = "ID de la reserva."
-            ) Long id
-    ) {
+    public Reservation getById(Long id) {
         validateId(id, "Reservation");
 
         return reservationRepository.findById(id).orElseThrow(() -> new RuntimeException("Register not found in the DataBase."));
@@ -227,35 +218,53 @@ public class ReservationService {
                   "id": null,
                   "startAt": null,
                   "endAt": null,
+                  "searchStartDate": "2025-01-01",
+                  "searchEndDate": "2025-12-31",
                   "numberOfNights": null,
                   "numberOfPeople": 4,
-                  "totalPrice": null
+                  "totalPrice": null,
+                  "hotelId": 5,
+                  "personId": null
                 }
 
-                En este ejemplo, solo se filtrarán las reservaciones que tengan 4 personas."""
+                En este ejemplo, se filtrarán reservaciones que:
+                - Tengan 4 personas
+                - Inicien entre 2025-01-01 y 2025-12-31
+                - Pertenezcan al hotel con ID 5"""
     )
     public List<ReservationDTO> findReservationBySpec(
             @ToolParam(required = false,
                     description = "Identificador único del registro. No obligatorio.") Long id,
             @ToolParam(required = false,
-                    description = "Fecha en la que inicia la reservación. No obligatorio.") LocalDate startAt,
+                    description = "Fecha exacta en la que inicia la reservación. No obligatorio.") LocalDate startAt,
             @ToolParam(required = false,
-                    description = "Fecha en la que finaliza la reservación. No obligatorio.") LocalDate endAt,
+                    description = "Fecha exacta en la que finaliza la reservación. No obligatorio.") LocalDate endAt,
+            @ToolParam(required = false,
+                    description = "Fecha mínima de inicio de búsqueda (inclusive). Para buscar reservas en un rango. No obligatorio.") LocalDate searchStartDate,
+            @ToolParam(required = false,
+                    description = "Fecha máxima de inicio de búsqueda (inclusive). Para buscar reservas en un rango. No obligatorio.") LocalDate searchEndDate,
             @ToolParam(required = false,
                     description = "Número total de noches que dura la reservación. No obligatorio.") Integer numberOfNights,
             @ToolParam(required = false,
                     description = "Cantidad de personas incluidas en la reservación. No obligatorio.") Integer numberOfPeople,
             @ToolParam(required = false,
-                    description = "Precio total de la reservación. No obligatorio.") BigDecimal totalPrice
+                    description = "Precio total de la reservación. No obligatorio.") BigDecimal totalPrice,
+            @ToolParam(required = false,
+                    description = "ID del hotel al que pertenece la habitación reservada. No obligatorio.") Long hotelId,
+            @ToolParam(required = false,
+                    description = "ID de la persona/cliente que realizó la reservación. No obligatorio.") Long personId
     ){
         Specification<Reservation> specification = Specification.unrestricted();
 
         specification = specification.and(ReservationSpecifications.hasId(id));
         specification = specification.and(ReservationSpecifications.hasStartAt(startAt));
         specification = specification.and(ReservationSpecifications.hasEndAt(endAt));
+        specification = specification.and(ReservationSpecifications.hasStartAtBetween(searchStartDate, searchEndDate));
         specification = specification.and(ReservationSpecifications.hasNumberOfNights(numberOfNights));
         specification = specification.and(ReservationSpecifications.hasNumberOfPeople(numberOfPeople));
         specification = specification.and(ReservationSpecifications.hasTotalPrice(totalPrice));
+        specification = specification.and(ReservationSpecifications.hasHotelId(hotelId));
+        specification = specification.and(ReservationSpecifications.hasPersonId(personId));
 
         specification = specification.and(ReservationSpecifications.fetchEverythingForDTO());
 

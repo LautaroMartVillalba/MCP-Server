@@ -155,18 +155,35 @@ public class AddressService {
             name = "find_address_by_spec",
             description = """
                 Realiza una búsqueda dinámica de direcciones según los parámetros provistos.
-
+                Permite filtrar direcciones por tipo (Hotel o Person) y opcionalmente cargar 
+                la entidad relacionada para obtener información completa.
+                
                 Todos los parámetros son opcionales. Si un parámetro no se incluye, se ignora en el filtro.
-                Ejemplo de uso:
+                
+                Parámetro 'addressType' controla el tipo de dirección:
+                - "HOTEL": Filtra solo direcciones de hoteles (HotelAddress)
+                - "PERSON": Filtra solo direcciones de personas (PersonAddress)
+                - null: No filtra por tipo (retorna ambos tipos)
+                
+                Parámetro 'fetchRelatedEntity':
+                - true: Carga la entidad relacionada (Hotel o Person) con la dirección para evitar consultas adicionales
+                - false/null: Solo retorna datos básicos de la dirección
+                
+                Parámetros 'hotelId' y 'personId' permiten filtrar por ID específico de la entidad relacionada.
+                NOTA: No se puede usar hotelId y personId simultáneamente.
+                
+                Ejemplo de uso para buscar direcciones de hoteles y cargar los datos del hotel:
                 {
-                  "id": null,
-                  "street": Groove,
-                  "number": null,
-                  "floor": null,
-                  "departmentNumber": null
+                  "street": "Groove",
+                  "addressType": "HOTEL",
+                  "fetchRelatedEntity": true
                 }
-
-                En este ejemplo, solo se filtrarán las direcciones que tengan el nombre de "Groove" en su calle."""
+                
+                Ejemplo para buscar direcciones de una persona específica:
+                {
+                  "personId": 5,
+                  "fetchRelatedEntity": true
+                }"""
     )
     public List<AddressDTO> findAddressSpect(
             @ToolParam(required = false,
@@ -174,20 +191,65 @@ public class AddressService {
             @ToolParam(required = false,
                     description = "Nombre de la calle del registro. No obligatorio.") String street,
             @ToolParam(required = false,
-                    description = "Número del inmueble de la dirección, dependiente de la calle (street). No obligatorio") String number,
+                    description = "Número del inmueble de la dirección, dependiente de la calle (street). No obligatorio.") String number,
             @ToolParam(required = false,
                     description = "Piso en el cual se encuentra la dirección en caso de ser un departamento. No obligatorio.") String floor,
             @ToolParam(required = false,
-                    description = "Número de puerta/departamento en el cual se encuentra la dirección en caso de ser un departamento. No obligatorio.") String departmentNumber
+                    description = "Número de puerta/departamento en el cual se encuentra la dirección en caso de ser un departamento. No obligatorio.") String departmentNumber,
+            @ToolParam(required = false,
+                    description = """
+                            Tipo de dirección a filtrar. Valores posibles:
+                            - "HOTEL": Solo direcciones de hoteles (HotelAddress)
+                            - "PERSON": Solo direcciones de personas (PersonAddress)
+                            - null: Sin filtro por tipo (retorna ambos). No obligatorio.""") String addressType,
+            @ToolParam(required = false,
+                    description = """
+                            Si es true, carga la entidad relacionada (Hotel o Person) junto con la dirección.
+                            Útil para obtener información completa sin consultas adicionales.
+                            Solo tiene efecto cuando addressType está especificado o cuando se usa hotelId/personId.
+                            Default: false. No obligatorio.""") Boolean fetchRelatedEntity,
+            @ToolParam(required = false,
+                    description = """
+                            ID del hotel asociado a la dirección. 
+                            Filtra automáticamente por tipo HotelAddress.
+                            No puede usarse junto con personId. No obligatorio.""") Long hotelId,
+            @ToolParam(required = false,
+                    description = """
+                            ID de la persona asociada a la dirección.
+                            Filtra automáticamente por tipo PersonAddress.
+                            No puede usarse junto con hotelId. No obligatorio.""") Long personId
     ){
-        log.debug("Buscando direcciones con parámetros: street={}, number={}", street, number);
+        log.debug("Buscando direcciones con parámetros: street={}, number={}, addressType={}, fetchRelatedEntity={}, hotelId={}, personId={}", 
+                  street, number, addressType, fetchRelatedEntity, hotelId, personId);
+        
+        if (hotelId != null && hotelId > 0 && personId != null && personId > 0) {
+            throw new RuntimeException("Cannot filter by both hotelId and personId. An address belongs to either a Hotel or a Person, not both.");
+        }
+        
         Specification<Address> specification = Specification.unrestricted();
 
-        specification.and(AddressSpecifications.hasId(id));
-        specification.and(AddressSpecifications.hasStreet(street));
-        specification.and(AddressSpecifications.hasNumber(number));
-        specification.and(AddressSpecifications.hasFloor(floor));
-        specification.and(AddressSpecifications.hasDepartmentNumber(departmentNumber));
+        // basic filters
+        specification = specification.and(AddressSpecifications.hasId(id));
+        specification = specification.and(AddressSpecifications.hasStreet(street));
+        specification = specification.and(AddressSpecifications.hasNumber(number));
+        specification = specification.and(AddressSpecifications.hasFloor(floor));
+        specification = specification.and(AddressSpecifications.hasDepartmentNumber(departmentNumber));
+        
+        specification = specification.and(AddressSpecifications.hasHotelId(hotelId));
+        specification = specification.and(AddressSpecifications.hasPersonId(personId));
+        
+        if ("HOTEL".equalsIgnoreCase(addressType)) {
+            specification = specification.and(AddressSpecifications.isHotelAddress());
+        } else if ("PERSON".equalsIgnoreCase(addressType)) {
+            specification = specification.and(AddressSpecifications.isPersonAddress());
+        }
+        
+        if (Boolean.TRUE.equals(fetchRelatedEntity)) {
+            specification = specification.and(AddressSpecifications.fetchHotelRelationship());
+            specification = specification.and(AddressSpecifications.fetchPersonRelationship());
+        }
+        
+        // Always fetch state for DTO mapping
         specification = specification.and(AddressSpecifications.fetchEverythingForDTO());
 
         List<AddressDTO> result = parseFromAddressEntityToAddressDTO(addressRepository.findAll(specification));

@@ -3,9 +3,12 @@ package ar.mcp.server.services.attraction;
 import ar.mcp.server.domain.entities.Attraction;
 import jakarta.persistence.criteria.Fetch;
 import jakarta.persistence.criteria.JoinType;
+import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.LocalTime;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class AttractionSpecifications {
 
@@ -29,11 +32,30 @@ public class AttractionSpecifications {
             return criteriaBuilder.equal(root.get("name"), name);
         };
     }
-    public static Specification<Attraction> hasDescription(String description){
+    /**
+     * Creates a specification to filter attractions by keywords in their description.
+     * Matches attractions where the description contains ANY of the provided keywords (OR logic).
+     *
+     * @param keywords List of keywords to search for in the description (case-insensitive).
+     * @return A specification that filters by keywords, or null if the input is null/empty.
+     */
+    public static Specification<Attraction> hasDescriptionContainingKeywords(List<String> keywords){
         return (root, query, criteriaBuilder) -> {
-            if (description == null || description.isBlank())return null;
-
-            return criteriaBuilder.like(root.get("description"), description);
+            if (keywords == null || keywords.isEmpty()) return null;
+            
+            List<Predicate> predicates = keywords.stream()
+                    .filter(keyword -> keyword != null && !keyword.isBlank())
+                    .map(keyword -> criteriaBuilder.like(
+                            criteriaBuilder.lower(root.get("description")),
+                            "%" + keyword.toLowerCase() + "%"
+                    ))
+                    .collect(Collectors.toList());
+            
+            if(predicates.isEmpty()) {
+                return null;
+            }
+            
+            return criteriaBuilder.or(predicates.toArray(new Predicate[0]));
         };
     }
     public static Specification<Attraction> hasCapacityGreaterThan(Integer min){
@@ -67,13 +89,15 @@ public class AttractionSpecifications {
 
     public static Specification<Attraction> fetchEverythingForDTO() {
         /**
-         * Fetches `hotel` association to avoid additional queries during DTO mapping.
+         * Fetches associations for DTO mapping.
+         * Note: Attraction has ManyToMany with hotels (mapped by Hotel), not a single hotel reference.
+         * No fetch needed here as hotels collection would cause circular reference issues.
          *
-         * @return Specification that performs a LEFT fetch join on `hotel`
+         * @return Specification that marks query as distinct
          */
         return (root, query, criteriaBuilder) -> {
             if (Attraction.class.equals(query.getResultType())) {
-                root.fetch("hotel", JoinType.LEFT);
+                // No fetch: 'hotels' is a collection managed by Hotel side
                 query.distinct(true);
             }
             return criteriaBuilder.conjunction();

@@ -1,8 +1,12 @@
 package ar.mcp.server.services.room_booking_period;
 
+import ar.mcp.server.domain.entities.Reservation;
+import ar.mcp.server.domain.entities.Room;
 import ar.mcp.server.domain.entities.RoomBookingPeriod;
 import jakarta.persistence.criteria.Fetch;
+import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.JoinType;
+import jakarta.persistence.criteria.Predicate;
 import ar.mcp.server.domain.enums.RoomBookingStatus;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -24,19 +28,62 @@ public class RoomBookingPeriodSpecifications {
         };
     }
 
-    public static Specification<RoomBookingPeriod> hasStartAt(LocalDate startAt) {
+    /**
+     * Filters room booking periods where the start date falls within a specified date range (inclusive).
+     *
+     * @param startDate minimum start date (inclusive). Null will be ignored.
+     * @param endDate maximum start date (inclusive). Null will be ignored.
+     * @return Specification for date range or null when both inputs are null.
+     */
+    public static Specification<RoomBookingPeriod> hasStartAtBetween(LocalDate startDate, LocalDate endDate) {
         return (root, query, criteriaBuilder) -> {
-            if (startAt == null) return null;
+            if (startDate == null && endDate == null) return null;
 
-            return criteriaBuilder.equal(root.get("startAt"), startAt);
+            Predicate predicate = criteriaBuilder.conjunction();
+            
+            if (startDate != null) {
+                predicate = criteriaBuilder.and(predicate, 
+                    criteriaBuilder.greaterThanOrEqualTo(root.get("startAt"), startDate));
+            }
+            
+            if (endDate != null) {
+                predicate = criteriaBuilder.and(predicate, 
+                    criteriaBuilder.lessThanOrEqualTo(root.get("startAt"), endDate));
+            }
+            
+            return predicate;
         };
     }
 
-    public static Specification<RoomBookingPeriod> hasEndAt(LocalDate endAt) {
+    /**
+     * Filters room booking periods by the hotel ID of the associated room.
+     *
+     * @param hotelId the hotel ID to filter by. Null or < 1 will be ignored.
+     * @return Specification for hotel ID or null when input is invalid.
+     */
+    public static Specification<RoomBookingPeriod> hasHotelId(Long hotelId) {
         return (root, query, criteriaBuilder) -> {
-            if (endAt == null) return null;
+            if (hotelId == null || hotelId < 1) return null;
 
-            return criteriaBuilder.equal(root.get("endAt"), endAt);
+            Join<RoomBookingPeriod, Room> roomJoin = root.join("room", JoinType.INNER);
+            
+            return criteriaBuilder.equal(roomJoin.get("hotel").get("id"), hotelId);
+        };
+    }
+
+    /**
+     * Filters room booking periods by the person/client ID from the reservation.
+     *
+     * @param personId the person ID to filter by. Null or < 1 will be ignored.
+     * @return Specification for person ID or null when input is invalid.
+     */
+    public static Specification<RoomBookingPeriod> hasPersonId(Long personId) {
+        return (root, query, criteriaBuilder) -> {
+            if (personId == null || personId < 1) return null;
+
+            Join<RoomBookingPeriod, Reservation> reservationJoin = root.join("reservation", JoinType.INNER);
+            
+            return criteriaBuilder.equal(reservationJoin.get("person").get("id"), personId);
         };
     }
 

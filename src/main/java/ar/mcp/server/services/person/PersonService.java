@@ -133,16 +133,7 @@ public class PersonService {
      * @return Optional containing the {@link Person} entity.
      * @throws RuntimeException if ID is null.
      */
-    @McpTool(
-            name = "get_person_by_id_object",
-            description = "Obtiene una persona por su ID y la devuelve como entidad completa."
-    )
-    public Optional<Person> getPersonByIdObject (
-            @ToolParam(
-                    required = true,
-                    description = "ID de la persona."
-            ) Long id
-    ){
+    public Optional<Person> getPersonByIdObject (Long id){
         if (id == null){
             throw new RuntimeException("Id parameter cannot be null.");
         }

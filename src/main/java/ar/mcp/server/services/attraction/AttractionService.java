@@ -137,14 +137,7 @@ public class AttractionService {
      * @throws RuntimeException        if ID is invalid.
      * @throws RuntimeException if the attraction is not found.
      */
-    @McpTool(
-            name = "get_attraction_by_id_object",
-            description = "Obtiene una entidad Attraction a partir de su ID."
-    )
-    public Attraction getAttractionByIdObject(
-            @ToolParam(required = true, description = """
-            ID de la atracción a obtener.
-            """) Long id) {
+    public Attraction getAttractionByIdObject(Long id) {
         if (id <= 0) {
             throw new RuntimeException("Id cannot be null.");
         }
@@ -162,14 +155,14 @@ public class AttractionService {
                 {
                   "id": null,
                   "name": null,
-                  "description": "jacuzzi con hidromasaje",
+                  "descriptionKeywords": ["spa", "piscina", "jacuzzi"],
                   "minPeopleCapacity": null,
                   "maxPeopleCapacity": null,
                   "openAt": null,
                   "closeAt": null
                 }
 
-                En este ejemplo, solo se filtrarán las atracciones cuya descripción tenga una coincidencia con "jacuzzi con hidromasaje" en su texto."""
+                En este ejemplo, solo se filtrarán las atracciones cuya descripción contenga al menos una de las palabras clave provistas (búsqueda con OR)."""
     )
     public List<AttractionDTO> findAttractionBySpec(
             @ToolParam(required = false,
@@ -178,9 +171,9 @@ public class AttractionService {
                     description = "Nombre de la atracción. No obligatorio.") String name,
             @ToolParam(required = false,
                     description = """
-            Idea general en frases cortas o con una o
-            dos palabras clave para evitar falsos negativos en coincidencias de
-            descripciones. No obligatorio.""") String description,
+            Lista de palabras clave para buscar en la descripción de la atracción.
+            La búsqueda es con lógica OR (cualquier coincidencia), insensible a mayúsculas/minúsculas.
+            Ejemplo: ["spa", "piscina", "jacuzzi"]. No obligatorio.""") List<String> descriptionKeywords,
             @ToolParam(required = false,
                     description = "Capacidad mínima de gente por la cual se quiere filtrar. No obligatorio.") Integer minPeopleCapacity,
             @ToolParam(required = false,
@@ -194,7 +187,7 @@ public class AttractionService {
 
         specification = specification.and(AttractionSpecifications.hasId(id));
         specification = specification.and(AttractionSpecifications.hasName(name));
-        specification = specification.and(AttractionSpecifications.hasDescription(description));
+        specification = specification.and(AttractionSpecifications.hasDescriptionContainingKeywords(descriptionKeywords));
         specification = specification.and(AttractionSpecifications.hasCapacityGreaterThan(minPeopleCapacity));
         specification = specification.and(AttractionSpecifications.hasCapacityLessThan(maxPeopleCapacity));
         specification = specification.and(AttractionSpecifications.hasOpenAt(openAt));
