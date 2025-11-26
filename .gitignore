@@ -31,3 +31,9 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Testing logs ###
+/chatbot_test_logs
+
+### Tesing information ###
+/information
