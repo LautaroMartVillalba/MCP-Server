@@ -52,18 +52,3 @@ Pruebas
 ```bash
 ./mvnw test
 ```
-
-Notas y consideraciones
-- Seguridad: `SecurityConfig` configura CORS y establece la política de sesiones como stateless. Actualmente CSRF está deshabilitado y la autenticación JWT está marcada como TODO. Revisar antes de exponer en producción.
-- Consultas dinámicas: se usan `Specification` (Spring Data JPA) para consultas flexibles; revisar `services/*Specifications.java` para ver los predicados disponibles.
-- Migraciones: las versiones iniciales de esquema y datos de prueba están en `src/main/resources/db/migration`.
-
-Contribuir
-- Crear una rama por feature: `git checkout -b feat/descripcion-corta`.
-- Hacer cambios, pruebas y abrir un Pull Request hacia `main`.
-
-Contacto
-- Autor/Repo: LautaroMartVillalba / MCP-Server
-
-Licencia
-- Añadir aquí la licencia del proyecto (por ejemplo MIT) si corresponde.
